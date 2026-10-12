@@ -1,0 +1,6 @@
+export const DISCORD_URL = 'https://discord.gg/latamorg'
+export const FACEBOOK_URL = 'https://facebook.com/tu-pagina'
+export const INSTAGRAM_URL = 'https://instagram.com/tu-cuenta'
+export const TWITCH_URL = 'https://twitch.tv/tu-canal'
+export const YOUTUBE_URL = 'https://youtube.com/@tu-canal'
+export const RSI_ORG_URL = 'https://robertsspaceindustries.com/en/orgs/LATAMORG'
