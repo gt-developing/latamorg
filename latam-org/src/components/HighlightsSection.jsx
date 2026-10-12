@@ -134,7 +134,7 @@ export default function HighlightsSection() {
       básica y una comunidad dispuesta a ayudarte.
     </p>
     <Link
-      to="/guias/primeros-pasos"
+      to="/guias/Primeros%20pasos"
       className="group mt-6 inline-flex items-center gap-2 self-start rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-space-900 transition hover:brightness-110"
     >
       Guía para nuevos
