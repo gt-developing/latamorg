@@ -1,0 +1,8 @@
+[build]
+  command = "npm --prefix latam-org ci && npm --prefix latam-org run build"
+  publish = "latam-org/dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
