@@ -8,6 +8,7 @@ import ContentPage from './pages/ContentPage'
 import ContentListPage from './pages/ContentListPage'
 import Footer from './components/Footer'
 import Nosotros from './pages/Nosotros'
+import SEO from './components/SEO'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             path="/"
             element={
               <>
+                <SEO />
                 <Hero />
                 <CommunitySection />
                 <HighlightsSection />

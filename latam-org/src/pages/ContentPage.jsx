@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { getItem, sectionLabels } from '../lib/content'
+import SEO from '../components/SEO'
 
 export default function ContentPage() {
   const { section, slug } = useParams()
@@ -20,6 +21,31 @@ export default function ContentPage() {
 
   return (
     <main className="px-global py-12">
+      <SEO
+        title={`${item.title} | LATAM Org`}
+        description={item.description || `Lee ${item.title} en LATAM Org, comunidad hispanohablante de Star Citizen.`}
+        type="article"
+        image={item.image}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          headline: item.title,
+          description: item.description,
+          image: item.image ? [item.image] : undefined,
+          mainEntityOfPage: {
+            '@type': 'WebPage',
+            '@id': `${window.location.origin}${window.location.pathname}`,
+          },
+          publisher: {
+            '@type': 'Organization',
+            name: 'LATAM Org',
+            logo: {
+              '@type': 'ImageObject',
+              url: `${window.location.origin}/logo.png`,
+            },
+          },
+        }}
+      />
       <article className="content-prose prose prose-invert prose-headings:text-white prose-a:text-accent prose-img:rounded-xl max-w-3xl">
         <p className="!mb-2 text-xs font-medium uppercase tracking-widest text-accent">
           {sectionLabels[item.section]}

@@ -3,6 +3,7 @@ import { FiSearch } from 'react-icons/fi'
 import { Link, useParams } from 'react-router-dom'
 import ContentCard from '../components/ContentCard'
 import { searchIndex, sectionLabels } from '../lib/content'
+import SEO from '../components/SEO'
 
 const normalize = (text) =>
   text
@@ -38,6 +39,10 @@ export default function ContentListPage() {
 
   return (
     <main className="px-global py-12">
+      <SEO
+        title={`${label}s de Star Citizen en español | LATAM Org`}
+        description={`Explora las ${label.toLowerCase()}s de LATAM Org sobre Star Citizen: contenido práctico y recursos para la comunidad hispanohablante.`}
+      />
       <header className="mb-8">
         <p className="text-xs font-medium uppercase tracking-widest text-accent">{label}s</p>
         <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">

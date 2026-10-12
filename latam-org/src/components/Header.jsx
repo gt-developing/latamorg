@@ -31,12 +31,12 @@ export default function Header() {
           <ul className="flex flex-wrap items-center gap-1 text-sm font-medium text-slate-300">
             {links.map((link) => (
               <li key={link.href}>
-                <a
-                  href={link.href}
+                <Link
+                  to={link.href}
                   className="rounded-md px-3 py-2 transition hover:bg-white/5 hover:text-white"
                 >
                   {link.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

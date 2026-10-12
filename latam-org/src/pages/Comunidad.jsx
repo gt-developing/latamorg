@@ -1,6 +1,7 @@
 import { FaDiscord, FaGlobeAmericas, FaUsers } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
 import { DISCORD_URL } from '../config/links'
+import SEO from '../components/SEO'
 
 const communityCards = [
   {
@@ -23,6 +24,10 @@ const communityCards = [
 export default function Comunidad() {
   return (
     <main className="px-global pb-20">
+      <SEO
+        title="Comunidad de Star Citizen en español | LATAM Org"
+        description="Únete a la comunidad hispanohablante de Star Citizen de LATAM Org, organiza tus sesiones y comparte aventuras con jugadores de toda Latinoamérica."
+      />
       <div className="mx-auto max-w-5xl">
         <header className="py-16 text-center sm:py-20">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-accent">

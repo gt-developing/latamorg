@@ -12,6 +12,7 @@ import {
   FaVoteYea,
 } from 'react-icons/fa'
 import { DISCORD_URL } from '../config/links'
+import SEO from '../components/SEO'
 
 const activities = [
   { icon: FaGem, label: 'Minería' },
@@ -41,6 +42,10 @@ function SectionIcon({ icon: Icon }) {
 export default function Nosotros() {
   return (
     <main className="px-global pb-20">
+      <SEO
+        title="Sobre LATAM Org | Organización de Star Citizen"
+        description="Conoce la historia, los departamentos y la estructura democrática de LATAM Org, una organización latinoamericana de Star Citizen."
+      />
       <div className="mx-auto max-w-5xl">
         {/* Encabezado + introducción */}
         <header className="py-16 sm:py-20">
