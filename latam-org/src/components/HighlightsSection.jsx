@@ -10,16 +10,14 @@ import featuredImage from '../assets/destacado.png'
 import newbieImage from '../assets/nuevos.png'
 import ContentSection from './ContentSection'
 import { searchIndex } from '../lib/content'
-import { DISCORD_URL } from '../config/links'
-
-const RSI_COMMUNITY_URL = 'https://robertsspaceindustries.com/community-hub'
+import { DISCORD_URL, RSI_ORG_URL } from '../config/links'
 
 const quickLinks = [
   {
     icon: BookOpen,
     title: 'Guías de inicio',
     text: 'Empieza tu viaje en Star Citizen',
-    href: '/guias/primeros-pasos',
+    href: '/guias',
   },
   {
     icon: MessageCircle,
@@ -32,14 +30,15 @@ const quickLinks = [
     icon: FaGlobe,
     title: 'Comunidad en RSI',
     text: 'Visítanos en el sitio oficial de Roberts Space Industries',
-    href: RSI_COMMUNITY_URL,
+    href: RSI_ORG_URL,
     external: true,
   },
   {
     icon: FaCalculator,
     title: 'Calculadora de aUEC',
     text: 'Calcula tus ganancias y rutas',
-    href: '/recursos/calculadora-auec',
+    href: 'https://expcarry.com/star-citizen-auec-calculator',
+    external: true,
   },
 ]
 
