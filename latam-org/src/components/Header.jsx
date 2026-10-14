@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import SearchBar from './SearchBar'
+import UserMenu from './UserMenu'
 import logoImage from '../assets/logo.png'
 
 const links = [
@@ -42,9 +43,12 @@ export default function Header() {
           </ul>
         </nav>
 
-        {/* Buscador (extremo derecho) */}
-        <div className="ml-auto flex w-full justify-end md:w-auto md:flex-1">
-          <SearchBar />
+        {/* Buscador + sesión (extremo derecho) */}
+        <div className="ml-auto flex w-full items-center justify-end gap-3 md:w-auto md:flex-1">
+          <div className="min-w-0 flex-1 md:max-w-xs">
+            <SearchBar />
+          </div>
+          <UserMenu />
         </div>
       </div>
     </header>

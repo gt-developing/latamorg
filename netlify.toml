@@ -1,6 +1,7 @@
 [build]
   command = "npm --prefix latam-org ci && npm --prefix latam-org run build"
   publish = "latam-org/dist"
+  functions = "latam-org/netlify/functions"
 
 [[redirects]]
   from = "/*"

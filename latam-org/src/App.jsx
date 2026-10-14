@@ -9,32 +9,41 @@ import ContentListPage from './pages/ContentListPage'
 import Footer from './components/Footer'
 import Nosotros from './pages/Nosotros'
 import SEO from './components/SEO'
+import PrivateGuides from './pages/PrivateGuides'
+import PrivateGuide from './pages/PrivateGuide'
+import Admin from './pages/Admin'
+import { AuthProvider } from './context/AuthContext'
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-space-900">
-        <Header />
+      <AuthProvider>
+        <div className="flex min-h-screen flex-col bg-space-900">
+          <Header />
 
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <>
-                <SEO />
-                <Hero />
-                <CommunitySection />
-                <HighlightsSection />
-              </>
-            }
-          />
-          <Route path="/comunidad" element={<Comunidad />} />
-          <Route path="/nosotros" element={<Nosotros />} />
-          <Route path="/:section" element={<ContentListPage />} />
-          <Route path="/:section/:slug" element={<ContentPage />} />
-        </Routes>
-        <Footer />
-      </div>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <>
+                  <SEO />
+                  <Hero />
+                  <CommunitySection />
+                  <HighlightsSection />
+                </>
+              }
+            />
+            <Route path="/comunidad" element={<Comunidad />} />
+            <Route path="/nosotros" element={<Nosotros />} />
+            <Route path="/privadas" element={<PrivateGuides />} />
+            <Route path="/privadas/:role/:slug" element={<PrivateGuide />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/:section" element={<ContentListPage />} />
+            <Route path="/:section/:slug" element={<ContentPage />} />
+          </Routes>
+          <Footer />
+        </div>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

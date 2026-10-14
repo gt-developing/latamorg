@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /privadas
+Disallow: /api/
 
 Sitemap: /sitemap.xml
