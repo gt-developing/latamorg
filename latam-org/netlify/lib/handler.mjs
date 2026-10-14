@@ -70,7 +70,9 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
   }
 
   const canAccess = (session, role) =>
-    session.isAdmin || (session.user.roles ?? []).includes(role)
+    session.isAdmin ||
+    (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID) ||
+    (session.user.roles ?? []).includes(role)
 
   const canManage = (session) =>
     session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
