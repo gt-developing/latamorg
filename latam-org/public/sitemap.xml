@@ -5,10 +5,7 @@
   <url><loc>https://latamorg.netlify.app/recursos</loc><priority>0.8</priority></url>
   <url><loc>https://latamorg.netlify.app/comunidad</loc><priority>0.8</priority></url>
   <url><loc>https://latamorg.netlify.app/nosotros</loc><priority>0.6</priority></url>
-  <url><loc>https://latamorg.netlify.app/guias/Glosario</loc><priority>0.7</priority></url>
   <url><loc>https://latamorg.netlify.app/guias/Ignorar</loc><priority>0.7</priority></url>
   <url><loc>https://latamorg.netlify.app/guias/Primeros%20pasos</loc><priority>0.7</priority></url>
-  <url><loc>https://latamorg.netlify.app/guias/Rutas%20de%20comercio</loc><priority>0.7</priority></url>
-  <url><loc>https://latamorg.netlify.app/guias/Void%20Enforcers</loc><priority>0.7</priority></url>
   <url><loc>https://latamorg.netlify.app/recursos/Recursos</loc><priority>0.7</priority></url>
 </urlset>

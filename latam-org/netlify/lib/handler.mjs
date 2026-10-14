@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS } from '../../shared/access.mjs'
+import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS, SUBADMIN_ROLE_ID } from '../../shared/access.mjs'
 import { parseCookies, serializeCookie, sign, verify } from './session.mjs'
 
 const SESSION_COOKIE = 'latam_session'
@@ -7,8 +7,6 @@ const STATE_COOKIE = 'latam_oauth'
 const SESSION_SECONDS = 7 * 24 * 60 * 60
 const DISCORD_ID = /^\d{5,25}$/
 const SLUG = /^[a-z0-9][a-z0-9_-]*$/i
-
-const roleLabel = (id) => ROLES.find((role) => role.id === id)?.label ?? id
 
 const json = (data, status = 200, cookies = []) => {
   const headers = new Headers({
@@ -48,7 +46,6 @@ const avatarUrl = (user) =>
  */
 export function createHandler({ store, env, privateGuides = [], fetchImpl = fetch }) {
   const adminId = env.ADMIN_DISCORD_ID || DEFAULT_ADMIN_ID
-
   const publicUser = (user) => ({
     id: user.id,
     name: user.name,
@@ -58,6 +55,7 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
     firstSeen: user.firstSeen,
     lastLogin: user.lastLogin,
     isAdmin: user.id === adminId,
+    isSubadmin: (user.roles ?? []).includes(SUBADMIN_ROLE_ID),
   })
 
   // Lee la cookie de sesión y carga al usuario con sus roles ACTUALES desde la base de datos,
@@ -73,6 +71,9 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
 
   const canAccess = (session, role) =>
     session.isAdmin || (session.user.roles ?? []).includes(role)
+
+  const canManage = (session) =>
+    session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
 
   return async function handle(req) {
     try {
@@ -181,16 +182,20 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         const session = await getSession(req)
         if (!session) return json({ user: null, roles: [], isAdmin: false })
         const user = publicUser(session.user)
-        return json({ user, roles: user.roles, isAdmin: session.isAdmin })
+        return json({ user, roles: user.roles, isAdmin: session.isAdmin, isSubadmin: user.isSubadmin })
       }
 
       // ───────── Guías privadas ─────────
       if (method === 'GET' && path === '/private/guides') {
         const session = await getSession(req)
         if (!session) return json({ error: 'Inicia sesión' }, 401)
+        const roles = ROLES
         const guides = privateGuides
           .filter((guide) => canAccess(session, guide.role))
-          .map(({ body, ...meta }) => ({ ...meta, roleLabel: roleLabel(meta.role) }))
+          .map(({ body: _body, ...meta }) => ({
+            ...meta,
+            roleLabel: roles.find((role) => role.id === meta.role)?.label ?? meta.role,
+          }))
         return json({ guides })
       }
 
@@ -199,18 +204,26 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         const [, role, slug] = guideMatch
         const session = await getSession(req)
         if (!session) return json({ error: 'Inicia sesión' }, 401)
-        if (!ROLE_IDS.includes(role) || !SLUG.test(slug)) return json({ error: 'No encontrada' }, 404)
+        const roles = ROLES
+        if (!roles.some((item) => item.id === role) || !SLUG.test(slug)) {
+          return json({ error: 'No encontrada' }, 404)
+        }
         if (!canAccess(session, role)) return json({ error: 'No tienes permiso' }, 403)
         const guide = privateGuides.find((item) => item.role === role && item.slug === slug)
         if (!guide) return json({ error: 'No encontrada' }, 404)
-        return json({ guide: { ...guide, roleLabel: roleLabel(role) } })
+        return json({
+          guide: { ...guide, roleLabel: roles.find((item) => item.id === role)?.label ?? role },
+        })
       }
 
       // ───────── Administración ─────────
-      if (path === '/admin/users' || path.startsWith('/admin/users/')) {
+      if (
+        path === '/admin/users' ||
+        path.startsWith('/admin/users/')
+      ) {
         const session = await getSession(req)
         if (!session) return json({ error: 'Inicia sesión' }, 401)
-        if (!session.isAdmin) return json({ error: 'Solo administradores' }, 403)
+        if (!canManage(session)) return json({ error: 'Solo administradores' }, 403)
 
         if (method === 'GET' && path === '/admin/users') {
           const users = (await store.list())
@@ -234,17 +247,28 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
           }
           if (
             !Array.isArray(body?.roles) ||
-            body.roles.some((role) => typeof role !== 'string' || !ROLE_IDS.includes(role))
+            body.roles.some(
+              (role) =>
+                typeof role !== 'string' ||
+                !ROLE_IDS.includes(role),
+            )
           ) {
             return json({ error: 'Roles inválidos' }, 400)
           }
 
           const target = await store.get(id)
           if (!target) return json({ error: 'Usuario no encontrado' }, 404)
+          if (target.id === adminId || (!session.isAdmin && body.roles.includes(SUBADMIN_ROLE_ID))) {
+            return json({ error: 'No puedes modificar este usuario' }, 403)
+          }
           target.roles = ROLE_IDS.filter((role) => body.roles.includes(role))
+          for (const role of body.roles) {
+            if (!target.roles.includes(role)) target.roles.push(role)
+          }
           await store.set(id, target)
           return json({ user: publicUser(target) })
         }
+
       }
 
       return json({ error: 'No encontrado' }, 404)

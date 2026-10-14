@@ -7,6 +7,7 @@ const formatDate = (value) =>
   value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 
 function Dashboard() {
+  const { isAdmin: isMainAdmin } = useAuth()
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [status, setStatus] = useState('loading')
@@ -52,6 +53,7 @@ function Dashboard() {
   }, [users, query, filter])
 
   async function toggleRole(user, roleId) {
+    if (roleId === 'subadmins' && !user.isAdmin && !isMainAdmin) return
     const next = user.roles.includes(roleId)
       ? user.roles.filter((id) => id !== roleId)
       : [...user.roles, roleId]
@@ -77,6 +79,7 @@ function Dashboard() {
     } finally {
       setSavingId(null)
     }
+
   }
 
   if (status === 'loading') return <p className="text-slate-400">Cargando usuarios…</p>
@@ -166,7 +169,7 @@ function Dashboard() {
                         key={role.id}
                         type="button"
                         aria-pressed={active}
-                        disabled={savingId === user.id}
+                        disabled={savingId === user.id || (role.id === 'subadmins' && !isMainAdmin)}
                         onClick={() => toggleRole(user, role.id)}
                         className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                           active
@@ -194,7 +197,7 @@ function Dashboard() {
 }
 
 export default function Admin() {
-  const { user, isAdmin, loading } = useAuth()
+  const { user, isAdmin, isSubadmin, loading } = useAuth()
 
   if (loading) return <main className="px-global py-16 text-slate-400">Cargando…</main>
 
@@ -210,7 +213,7 @@ export default function Admin() {
     )
   }
 
-  if (!isAdmin) {
+  if (!isAdmin && !isSubadmin) {
     return (
       <main className="px-global py-16 text-center">
         <h1 className="text-2xl font-bold text-white">Acceso restringido</h1>

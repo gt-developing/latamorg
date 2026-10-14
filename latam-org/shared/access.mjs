@@ -9,9 +9,12 @@ export const ROLES = [
   { id: 'exploracion', label: 'Exploración' },
   { id: 'ingenieria', label: 'Ingeniería' },
   { id: 'reciclaje', label: 'Reciclaje' },
+  { id: 'void-enforcers', label: 'Void Enforcers' },
+  { id: 'subadmins', label: 'Subadmins' },
 ]
 
 export const ROLE_IDS = ROLES.map((role) => role.id)
+export const SUBADMIN_ROLE_ID = 'subadmins'
 
 // ID de Discord del administrador. Puede sobrescribirse con la variable ADMIN_DISCORD_ID.
 export const DEFAULT_ADMIN_ID = '680603294036787319'

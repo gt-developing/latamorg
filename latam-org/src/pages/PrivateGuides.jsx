@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { FaLock } from 'react-icons/fa'
 import LoginPrompt from '../components/LoginPrompt'
 import { useAuth } from '../context/AuthContext'
-import { ROLES } from '../../shared/access.mjs'
 
 export default function PrivateGuides() {
   const { user, roles, isAdmin, loading } = useAuth()
@@ -46,10 +45,12 @@ export default function PrivateGuides() {
     )
   }
 
-  const groups = ROLES.map((role) => ({
-    ...role,
-    items: guides.filter((guide) => guide.role === role.id),
-  })).filter((group) => group.items.length > 0)
+  const groups = guides.reduce((result, guide) => {
+    const group = result.find((item) => item.id === guide.role)
+    if (group) group.items.push(guide)
+    else result.push({ id: guide.role, label: guide.roleLabel, items: [guide] })
+    return result
+  }, [])
 
   return (
     <main className="px-global py-12">
@@ -69,7 +70,7 @@ export default function PrivateGuides() {
                 key={id}
                 className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent"
               >
-                {ROLES.find((role) => role.id === id)?.label ?? id}
+                {id}
               </span>
             ))
           ) : (
