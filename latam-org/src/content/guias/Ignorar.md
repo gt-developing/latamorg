@@ -59,7 +59,7 @@ Una imagen se escribe con `![descripción](dirección)`. La descripción es el t
 
 *Puedes poner un pie de foto en cursiva justo debajo de la imagen.*
 
-Para usar una imagen tuya, ponla en la carpeta `public/` y escribe su ruta, por ejemplo `![Mi nave](/mi-nave.jpg)`.
+Para usar una imagen tuya, ponla en la carpeta `public/` y escribe su ruta, por ejemploo `![Mi nave](/mi-nave.jpg)`.
 
 ## Enlaces
 
