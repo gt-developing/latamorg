@@ -39,7 +39,7 @@ const avatarUrl = (user) =>
 
 /**
  * Crea el manejador de la API.
- *  - store:         { get(id), set(id, valor), list() } con los usuarios y sus roles.
+ *  - store:         { get(id), list(), updateRoles(id, roles), upsertLogin(datos) } con los usuarios y sus roles.
  *  - env:           variables de entorno.
  *  - privateGuides: guías confidenciales [{ role, slug, title, description, body }].
  *  - fetchImpl:     fetch (se puede reemplazar en pruebas).
@@ -151,16 +151,12 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         const me = await meRes.json()
         if (!DISCORD_ID.test(String(me.id))) return redirect('/?login=error', [clearState])
 
-        // Se conservan los roles que ya tuviera asignados.
         const now = new Date().toISOString()
-        const existing = await store.get(me.id)
-        await store.set(me.id, {
+        await store.upsertLogin({
           id: me.id,
           username: me.username,
           name: me.global_name || me.username,
           avatar: me.avatar ?? null,
-          roles: existing?.roles ?? [],
-          firstSeen: existing?.firstSeen ?? now,
           lastLogin: now,
         })
 
@@ -263,19 +259,16 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
           if (target.id === adminId || (!session.isAdmin && body.roles.includes(SUBADMIN_ROLE_ID))) {
             return json({ error: 'No puedes modificar este usuario' }, 403)
           }
-          target.roles = ROLE_IDS.filter((role) => body.roles.includes(role))
-          for (const role of body.roles) {
-            if (!target.roles.includes(role)) target.roles.push(role)
-          }
-          await store.set(id, target)
-          return json({ user: publicUser(target) })
+          const roles = ROLE_IDS.filter((role) => body.roles.includes(role))
+          const updated = await store.updateRoles(id, roles)
+          return json({ user: publicUser(updated) })
         }
 
       }
 
       return json({ error: 'No encontrado' }, 404)
     } catch (error) {
-      console.error(error)
+      console.error(error instanceof Error ? error.message : String(error))
       return json({ error: 'Error del servidor' }, 500)
     }
   }
