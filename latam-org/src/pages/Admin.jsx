@@ -10,6 +10,8 @@ function Dashboard() {
   const { isAdmin: isMainAdmin } = useAuth()
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
+  const [sections, setSections] = useState([])
+  const [permissions, setPermissions] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [savingId, setSavingId] = useState(null)
@@ -27,6 +29,8 @@ function Dashboard() {
         if (cancelled) return
         setUsers(data.users)
         setRoles(data.roles)
+        setSections(data.sections ?? [])
+        setPermissions(data.permissions ?? [])
         setStatus('ready')
       })
       .catch(() => !cancelled && setStatus('error'))
@@ -79,7 +83,45 @@ function Dashboard() {
     } finally {
       setSavingId(null)
     }
+  }
 
+  async function togglePermission(user, sectionId, field) {
+      const current = permissions.find(
+        (permission) => permission.user_id === user.id && permission.section_id === sectionId,
+      )
+      const next = {
+        canPublishGuides: field === 'can_publish_guides'
+          ? !current?.can_publish_guides
+          : Boolean(current?.can_publish_guides),
+        canManageEvents: field === 'can_manage_events'
+          ? !current?.can_manage_events
+          : Boolean(current?.can_manage_events),
+      }
+      setError('')
+      try {
+        const response = await fetch(`/api/admin/permissions/${user.id}/${sectionId}`, {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(next),
+        })
+        if (!response.ok) throw new Error()
+        if (!next.canPublishGuides && !next.canManageEvents) {
+          setPermissions((list) => list.filter(
+            (permission) => !(permission.user_id === user.id && permission.section_id === sectionId),
+          ))
+        } else {
+          const data = await response.json()
+          setPermissions((list) => [
+            ...list.filter(
+              (permission) => !(permission.user_id === user.id && permission.section_id === sectionId),
+            ),
+            data.permission,
+          ])
+        }
+      } catch {
+        setError(`No se pudo actualizar el permiso de ${user.name}.`)
+      }
   }
 
   if (status === 'loading') return <p className="text-slate-400">Cargando usuarios…</p>
@@ -161,26 +203,45 @@ function Dashboard() {
               {user.isAdmin ? (
                 <p className="text-sm text-slate-400">Acceso total a todas las secciones</p>
               ) : (
-                <div className="flex flex-wrap gap-2" role="group" aria-label={`Roles de ${user.name}`}>
-                  {roles.map((role) => {
-                    const active = user.roles.includes(role.id)
-                    return (
-                      <button
-                        key={role.id}
-                        type="button"
-                        aria-pressed={active}
-                        disabled={savingId === user.id || (role.id === 'subadmins' && !isMainAdmin)}
-                        onClick={() => toggleRole(user, role.id)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                          active
-                            ? 'border-accent bg-accent/15 text-accent'
-                            : 'border-white/10 text-slate-400 hover:border-white/30 hover:text-white'
-                        }`}
-                      >
-                        {role.label}
-                      </button>
-                    )
-                  })}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2" role="group" aria-label={`Roles de ${user.name}`}>
+                    {roles.map((role) => {
+                      const active = user.roles.includes(role.id)
+                      return (
+                        <button
+                          key={role.id}
+                          type="button"
+                          aria-pressed={active}
+                          disabled={savingId === user.id || (role.id === 'subadmins' && !isMainAdmin)}
+                          onClick={() => toggleRole(user, role.id)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? 'border-accent bg-accent/15 text-accent'
+                              : 'border-white/10 text-slate-400 hover:border-white/30 hover:text-white'
+                          }`}
+                        >
+                          {role.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {sections.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {sections.map((section) => {
+                        const permission = permissions.find(
+                          (item) => item.user_id === user.id && item.section_id === section.id,
+                        )
+                        return (
+                          <div key={section.id} className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-400">
+                            <span>{section.label}: </span>
+                            <button type="button" onClick={() => togglePermission(user, section.id, 'can_publish_guides')} className={permission?.can_publish_guides ? 'text-accent' : 'text-slate-500'}>publicar</button>
+                            <span> · </span>
+                            <button type="button" onClick={() => togglePermission(user, section.id, 'can_manage_events')} className={permission?.can_manage_events ? 'text-accent' : 'text-slate-500'}>eventos</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

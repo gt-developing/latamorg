@@ -1,16 +1,44 @@
-# React + Vite
+# LATAM Org
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Sitio de la comunidad hispanohablante de Star Citizen. La aplicación usa React,
+Vite, Tailwind CSS y Netlify Functions.
 
-Currently, two official plugins are available:
+## Desarrollo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Desde la raíz del repositorio:
 
-## React Compiler
+```bash
+npm --prefix latam-org install
+npm --prefix latam-org run dev:api
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+El frontend sin API puede ejecutarse con `npm --prefix latam-org run dev`.
 
-## Expanding the Oxlint configuration
+## Variables de entorno
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+La función serverless necesita `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`,
+`SESSION_SECRET`, `SITE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` y opcionalmente
+`ADMIN_DISCORD_ID`. La clave `SUPABASE_SECRET_KEY` solo debe configurarse en el
+entorno server-side de Netlify; nunca debe llevar prefijo `VITE_`.
+
+## Guías
+
+Las guías públicas y privadas se almacenan en la tabla `guides` de Supabase. Para
+cargar el contenido Markdown existente una vez:
+
+```bash
+npm --prefix latam-org run seed-guides
+```
+
+El script lee `src/content/` y `private-content/`; no debe ejecutarse sin las
+variables de Supabase configuradas. El contenido público se muestra bajo `/guias`.
+La generación del sitemap sigue siendo parte del build y todavía no incluye
+automáticamente las guías creadas desde el dashboard.
+
+## Validación
+
+```bash
+npm --prefix latam-org test
+npm --prefix latam-org run lint
+npm --prefix latam-org run build
+```

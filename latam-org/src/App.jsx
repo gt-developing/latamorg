@@ -12,6 +12,8 @@ import SEO from './components/SEO'
 import PrivateGuides from './pages/PrivateGuides'
 import PrivateGuide from './pages/PrivateGuide'
 import Admin from './pages/Admin'
+import Dashboard from './pages/Dashboard'
+import GuideEditor from './pages/GuideEditor'
 import { AuthProvider } from './context/AuthContext'
 
 function App() {
@@ -38,6 +40,9 @@ function App() {
             <Route path="/privadas" element={<PrivateGuides />} />
             <Route path="/privadas/:role/:slug" element={<PrivateGuide />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/dashboard/guides/new" element={<GuideEditor />} />
+            <Route path="/dashboard/guides/:id" element={<GuideEditor />} />
             <Route path="/:section" element={<ContentListPage />} />
             <Route path="/:section/:slug" element={<ContentPage />} />
           </Routes>

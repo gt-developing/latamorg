@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FiSearch } from 'react-icons/fi'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import ContentCard from '../components/ContentCard'
-import { searchIndex, sectionLabels } from '../lib/content'
+import { fetchPublicGuides, sectionLabels } from '../lib/content'
 import SEO from '../components/SEO'
 
 const normalize = (text) =>
@@ -14,9 +14,27 @@ const normalize = (text) =>
 export default function ContentListPage() {
   const { section } = useParams()
   const [query, setQuery] = useState('')
+  const [allItems, setAllItems] = useState([])
+  const [status, setStatus] = useState('loading')
   const label = sectionLabels[section]
+  useEffect(() => {
+    if (section !== 'guias') return undefined
+    let cancelled = false
+    fetchPublicGuides()
+      .then((items) => {
+        if (!cancelled) {
+          setAllItems(items)
+          setStatus('ready')
+        }
+      })
+      .catch(() => !cancelled && setStatus('error'))
+    return () => {
+      cancelled = true
+    }
+  }, [section])
+
   const items = useMemo(() => {
-    const sectionItems = searchIndex.filter((item) => item.section === section)
+    const sectionItems = allItems.filter((item) => item.section === section)
     const normalizedQuery = normalize(query.trim())
 
     if (!normalizedQuery) return sectionItems
@@ -24,7 +42,9 @@ export default function ContentListPage() {
     return sectionItems.filter((item) =>
       normalize(`${item.title} ${item.description}`).includes(normalizedQuery),
     )
-  }, [query, section])
+  }, [allItems, query, section])
+
+  if (section === 'recursos') return <Navigate to="/guias" replace />
 
   if (!label) {
     return (
@@ -65,7 +85,13 @@ export default function ContentListPage() {
         </label>
       </header>
 
-      {items.length > 0 ? (
+      {status === 'loading' ? (
+        <p className="text-slate-400">Cargando guías…</p>
+      ) : status === 'error' ? (
+        <p className="rounded-2xl border border-red-400/30 bg-red-400/10 p-6 text-sm text-red-200">
+          No se pudieron cargar las guías. Intenta de nuevo.
+        </p>
+      ) : items.length > 0 ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {items.map((item) => (
             <ContentCard key={item.id} item={item} />
