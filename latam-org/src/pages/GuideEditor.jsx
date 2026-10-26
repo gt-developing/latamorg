@@ -12,14 +12,14 @@ export default function GuideEditor() {
   const { user, permissions, loading } = useAuth()
   const [form, setForm] = useState(empty)
   const [sections, setSections] = useState([])
-  const [status, setStatus] = useState(id === 'new' ? 'ready' : 'loading')
+  const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!user) return undefined
     const endpoint = id === 'new'
-      ? '/api/dashboard/guides'
+      ? '/api/dashboard/guides/new'
       : `/api/dashboard/guides/${encodeURIComponent(id)}`
     fetch(endpoint, { credentials: 'same-origin' })
       .then(async (response) => {
