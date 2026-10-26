@@ -23,7 +23,10 @@ export default function GuideEditor() {
       : `/api/dashboard/guides/${encodeURIComponent(id)}`
     fetch(endpoint, { credentials: 'same-origin' })
       .then(async (response) => {
-        if (!response.ok) throw new Error()
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || `Error ${response.status}`)
+        }
         return response.json()
       })
       .then((data) => {
@@ -31,14 +34,24 @@ export default function GuideEditor() {
         setSections(data.sections)
         setStatus('ready')
       })
-      .catch(() => setStatus('error'))
+      .catch((cause) => {
+        setError(cause.message)
+        setStatus('error')
+      })
   }, [id, user])
 
   if (loading) return <main className="px-global py-16 text-slate-400">Cargando…</main>
   if (!user) return <main className="px-global py-16 text-slate-400">Inicia sesión para continuar.</main>
   if (permissions.publishGuides.length === 0) return <main className="px-global py-16 text-slate-400">No tienes permisos.</main>
   if (status === 'loading') return <main className="px-global py-16 text-slate-400">Cargando guía…</main>
-  if (status === 'error') return <main className="px-global py-16 text-red-300">No se pudo cargar la guía.</main>
+  if (status === 'error') {
+    return (
+      <main className="px-global py-16 text-red-300">
+        <p>No se pudo cargar la guía.</p>
+        {error && <p className="mt-2 text-sm text-red-200">{error}</p>}
+      </main>
+    )
+  }
 
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }))
   async function save(event) {

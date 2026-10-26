@@ -308,7 +308,8 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         )
         const sectionIds = new Set(visibleSections.map((section) => section.id))
         const publishMatch = path.match(/^\/dashboard\/guides\/([^/]+)\/publish$/)
-        const guideId = path === '/dashboard/guides'
+        const isNewGuide = path === '/dashboard/guides/new'
+        const guideId = path === '/dashboard/guides' || isNewGuide
           ? null
           : publishMatch
             ? publishMatch[1]
