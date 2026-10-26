@@ -298,6 +298,24 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
       }
 
       // ───────── Dashboard de guías ─────────
+      if (method === 'GET' && path === '/dashboard/guides/new') {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        if (!store.listGuides || !store.listSections) return json({ error: 'No disponible' }, 500)
+        const sections = await store.listSections()
+        const visibleSections = sections.filter((section) =>
+          canPublishGuides(session, section.id, session.permissions),
+        )
+        if (
+          !session.isAdmin &&
+          !session.isSubadmin &&
+          !session.permissions.some((permission) => permission.can_publish_guides)
+        ) {
+          return json({ error: 'No tienes permiso' }, 403)
+        }
+        return json({ sections: visibleSections })
+      }
+
       if (path === '/dashboard/guides' || path.startsWith('/dashboard/guides/')) {
         const session = await getSession(req)
         if (!session) return json({ error: 'Inicia sesión' }, 401)
@@ -308,8 +326,7 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         )
         const sectionIds = new Set(visibleSections.map((section) => section.id))
         const publishMatch = path.match(/^\/dashboard\/guides\/([^/]+)\/publish$/)
-        const isNewGuide = path === '/dashboard/guides/new'
-        const guideId = path === '/dashboard/guides' || isNewGuide
+        const guideId = path === '/dashboard/guides'
           ? null
           : publishMatch
             ? publishMatch[1]
