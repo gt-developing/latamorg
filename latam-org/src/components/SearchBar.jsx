@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FiSearch } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
-import { fetchPublicGuides } from '../lib/content'
+import { searchIndex } from '../lib/content'
 
 const normalize = (text) =>
   text
@@ -12,15 +12,13 @@ const normalize = (text) =>
 export default function SearchBar() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [searchIndex, setSearchIndex] = useState([])
   const wrapperRef = useRef(null)
 
-  useEffect(() => {
-    fetchPublicGuides().then(setSearchIndex).catch(() => setSearchIndex([]))
-  }, [])
-
-  const q = normalize(query.trim())
-  const results = q ? searchIndex.filter((item) => normalize(item.title).includes(q)).slice(0, 6) : []
+  const results = useMemo(() => {
+    const q = normalize(query.trim())
+    if (!q) return []
+    return searchIndex.filter((item) => normalize(item.title).includes(q)).slice(0, 6)
+  }, [query])
 
   // Cierra el panel de resultados al hacer clic fuera
   useEffect(() => {
@@ -34,7 +32,7 @@ export default function SearchBar() {
   return (
     <div ref={wrapperRef} className="relative w-full max-w-xs">
       <label htmlFor="site-search" className="sr-only">
-        Buscar guías
+        Buscar guías y recursos
       </label>
       <div className="flex items-center gap-2 rounded-full border border-white/10 bg-space-700/70 px-4 py-2 transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
         <FiSearch className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -48,7 +46,7 @@ export default function SearchBar() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
-          placeholder="Buscar guías…"
+          placeholder="Buscar guías y recursos…"
           autoComplete="off"
           className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
         />

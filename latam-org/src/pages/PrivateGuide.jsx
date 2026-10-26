@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import LoginPrompt from '../components/LoginPrompt'
 import { useAuth } from '../context/AuthContext'
-import { markdownComponents } from '../lib/markdown.jsx'
 
 const messages = {
   forbidden: {
@@ -91,7 +90,7 @@ export default function PrivateGuide() {
         </p>
         <h1>{guide.title}</h1>
         {guide.description && <p className="lead text-slate-400">{guide.description}</p>}
-        <ReactMarkdown components={markdownComponents}>{guide.body}</ReactMarkdown>
+        <ReactMarkdown>{guide.body}</ReactMarkdown>
       </article>
       <Link to="/privadas" className="mt-10 inline-block text-sm font-semibold text-accent hover:underline">
         ← Volver a guías privadas

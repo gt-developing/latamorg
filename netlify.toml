@@ -3,6 +3,11 @@
   publish = "latam-org/dist"
   functions = "latam-org/netlify/functions"
 
+[dev]
+  command = "npm --prefix latam-org run dev"
+  targetPort = 5173
+  port = 8888
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

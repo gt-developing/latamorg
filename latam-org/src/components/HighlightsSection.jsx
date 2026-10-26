@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
 import {
   FaArrowRight as ArrowRight,
   FaBookOpen as BookOpen,
@@ -10,7 +9,7 @@ import {
 import featuredImage from '../assets/destacado.png'
 import newbieImage from '../assets/nuevos.png'
 import ContentSection from './ContentSection'
-import { fetchPublicGuides } from '../lib/content'
+import { searchIndex } from '../lib/content'
 import { DISCORD_URL, RSI_ORG_URL } from '../config/links'
 
 const quickLinks = [
@@ -72,11 +71,8 @@ function QuickLink({ icon: Icon, title, text, href, external }) {
 }
 
 export default function HighlightsSection() {
-  const [guides, setGuides] = useState([])
-
-  useEffect(() => {
-    fetchPublicGuides().then(setGuides).catch(() => setGuides([]))
-  }, [])
+  const guides = searchIndex.filter((item) => item.section === 'guias')
+  const resources = searchIndex.filter((item) => item.section === 'recursos')
 
   return (
     <>
@@ -138,7 +134,7 @@ export default function HighlightsSection() {
       básica y una comunidad dispuesta a ayudarte.
     </p>
     <Link
-      to="/guias/primeros-pasos"
+      to="/guias/Primeros%20pasos"
       className="group mt-6 inline-flex items-center gap-2 self-start rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-space-900 transition hover:brightness-110"
     >
       Guía para nuevos
@@ -158,6 +154,14 @@ export default function HighlightsSection() {
         items={guides}
         linkLabel="Ver todas las guías"
         linkTo="/guias"
+      />
+      <ContentSection
+        id="recursos"
+        title="Recursos"
+        description="Herramientas y referencias para aprovechar cada sesión"
+        items={resources}
+        linkLabel="Ver todos los recursos"
+        linkTo="/recursos"
       />
     </>
   )

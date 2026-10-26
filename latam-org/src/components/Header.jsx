@@ -6,6 +6,7 @@ import logoImage from '../assets/logo.png'
 const links = [
   { label: 'Inicio', href: '/' },
   { label: 'Guías', href: '/guias' },
+  { label: 'Recursos', href: '/recursos' },
   { label: 'Comunidad', href: '/comunidad' },
   { label: 'Nosotros', href: '/nosotros' },
 ]

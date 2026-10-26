@@ -2,14 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 const AuthContext = createContext(null)
 
-const anonymous = {
-  loading: false,
-  user: null,
-  roles: [],
-  isAdmin: false,
-  isSubadmin: false,
-  permissions: { publishGuides: [], manageEvents: [] },
-}
+const anonymous = { loading: false, user: null, roles: [], isAdmin: false, isSubadmin: false }
 
 // Dirección que inicia el login con Discord y vuelve a la página indicada.
 export const loginUrl = (next = '/') => `/api/auth/login?next=${encodeURIComponent(next)}`
@@ -28,7 +21,6 @@ export function AuthProvider({ children }) {
         roles: data.roles ?? [],
         isAdmin: Boolean(data.isAdmin),
         isSubadmin: Boolean(data.isSubadmin),
-        permissions: data.permissions ?? anonymous.permissions,
       })
     } catch {
       // Sin backend (por ejemplo con `npm run dev` a secas) el sitio funciona como visitante.
