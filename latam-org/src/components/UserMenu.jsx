@@ -81,14 +81,14 @@ export default function UserMenu() {
             </Link>
           )}
 
-          {(isAdmin || isSubadmin || permissions?.publishGuides?.length || permissions?.manageEvents?.length) && (
+          {Boolean(isAdmin || isSubadmin || permissions?.publishGuides?.length || permissions?.manageEvents?.length || permissions?.publishPublicGuides) && (
             <Link to="/dashboard/guias" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
               <FaShieldAlt className="h-4 w-4 text-accent" aria-hidden="true" />
               Dashboard de contenido
             </Link>
           )}
 
-          {(isAdmin || isSubadmin || permissions?.manageEvents?.length) && (
+          {Boolean(isAdmin || isSubadmin || permissions?.manageEvents?.length) && (
             <Link to="/dashboard/eventos" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
               <FaShieldAlt className="h-4 w-4 text-accent" aria-hidden="true" />
               Gestionar eventos

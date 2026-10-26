@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { FiSearch } from 'react-icons/fi'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import ContentCard from '../components/ContentCard'
-import { fetchPublicGuides, sectionLabels } from '../lib/content'
+import { useAuth } from '../context/AuthContext'
+import { fetchAvailableGuides, sectionLabels } from '../lib/content'
 import SEO from '../components/SEO'
 
 const normalize = (text) =>
@@ -13,6 +14,7 @@ const normalize = (text) =>
 
 export default function ContentListPage() {
   const { section } = useParams()
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [allItems, setAllItems] = useState([])
   const [status, setStatus] = useState('loading')
@@ -20,7 +22,7 @@ export default function ContentListPage() {
   useEffect(() => {
     if (section !== 'guias') return undefined
     let cancelled = false
-    fetchPublicGuides()
+    fetchAvailableGuides(Boolean(user))
       .then((items) => {
         if (!cancelled) {
           setAllItems(items)
@@ -31,10 +33,10 @@ export default function ContentListPage() {
     return () => {
       cancelled = true
     }
-  }, [section])
+  }, [section, user])
 
   const items = useMemo(() => {
-    const sectionItems = allItems.filter((item) => item.section === section)
+    const sectionItems = section === 'guias' ? allItems : allItems.filter((item) => item.section === section)
     const normalizedQuery = normalize(query.trim())
 
     if (!normalizedQuery) return sectionItems

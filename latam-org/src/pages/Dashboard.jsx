@@ -20,7 +20,7 @@ export default function Dashboard() {
   const [preview, setPreview] = useState(false)
   const availableIds = useMemo(() => isAdmin || isSubadmin ? ROLES.map((item) => item.id).filter((id) => id !== 'subadmins') : (permissions?.publishGuides ?? []), [isAdmin, isSubadmin, permissions])
   const availableSections = useMemo(() => ROLES.filter((item) => availableIds.includes(item.id) && item.id !== 'subadmins'), [availableIds])
-  const mayWritePublic = isAdmin || isSubadmin
+  const mayWritePublic = isAdmin || isSubadmin || permissions?.publishPublicGuides
 
   useEffect(() => {
     let cancelled = false

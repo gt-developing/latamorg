@@ -25,7 +25,6 @@ const socials = [
 const exploreLinks = [
   { label: 'Inicio', to: '/' },
   { label: 'Guías', to: '/guias' },
-  { label: 'Recursos', to: '/recursos' },
   { label: 'Comunidad', to: '/comunidad' },
   { label: 'Nosotros', to: '/nosotros' },
 ]

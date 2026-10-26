@@ -11,13 +11,18 @@ export default function ContentCard({ item }) {
         />
         <div className="p-5">
           <h3 className="text-lg font-bold text-white">{item.title}</h3>
+          {item.private && (
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-accent">
+              Privada · {item.roleLabel}
+            </p>
+          )}
           {item.description && (
             <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-400">
               {item.description}
             </p>
           )}
           <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent">
-            Leer {item.section === 'guias' ? 'guía' : 'recurso'} →
+            Leer guía →
           </span>
         </div>
       </Link>

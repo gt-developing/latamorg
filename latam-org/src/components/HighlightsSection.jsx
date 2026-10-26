@@ -10,7 +10,7 @@ import {
 import featuredImage from '../assets/destacado.webp'
 import newbieImage from '../assets/nuevos.webp'
 import ContentSection from './ContentSection'
-import { fetchPublicGuides, searchIndex } from '../lib/content'
+import { fetchPublicGuides } from '../lib/content'
 import { DISCORD_URL, RSI_ORG_URL } from '../config/links'
 
 const quickLinks = [
@@ -78,7 +78,6 @@ export default function HighlightsSection() {
     fetchPublicGuides().then((items) => { if (!cancelled) setGuides(items) })
     return () => { cancelled = true }
   }, [])
-  const resources = searchIndex.filter((item) => item.section === 'recursos')
 
   return (
     <>
@@ -160,14 +159,6 @@ export default function HighlightsSection() {
         items={guides}
         linkLabel="Ver todas las guías"
         linkTo="/guias"
-      />
-      <ContentSection
-        id="recursos"
-        title="Recursos"
-        description="Herramientas y referencias para aprovechar cada sesión"
-        items={resources}
-        linkLabel="Ver todos los recursos"
-        linkTo="/recursos"
       />
     </>
   )

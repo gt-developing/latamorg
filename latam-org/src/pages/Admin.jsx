@@ -6,10 +6,12 @@ import { useAuth } from '../context/AuthContext'
 const formatDate = (value) =>
   value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 
-function PermissionEditor({ user }) {
+function PermissionEditor({ user, canGrantPublicGuides }) {
   const [open, setOpen] = useState(false)
   const [sections, setSections] = useState([])
   const [permissions, setPermissions] = useState([])
+  const [publicGuidePermission, setPublicGuidePermission] = useState(Boolean(user.canPublishPublicGuides))
+  const [savingPublicPermission, setSavingPublicPermission] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
     if (!open) return undefined
@@ -17,7 +19,7 @@ function PermissionEditor({ user }) {
     fetch(`/api/admin/users/${user.id}/permissions`, { credentials: 'same-origin' }).then(async (res) => {
       if (!res.ok) throw new Error('No se pudieron cargar los permisos')
       return res.json()
-    }).then((data) => { if (!cancelled) { setSections(data.sections); setPermissions(data.permissions) } }).catch((e) => !cancelled && setError(e.message))
+    }).then((data) => { if (!cancelled) { setSections(data.sections); setPermissions(data.permissions); setPublicGuidePermission(Boolean(data.canPublishPublicGuides)) } }).catch((e) => !cancelled && setError(e.message))
     return () => { cancelled = true }
   }, [open, user.id])
   async function save(sectionId, key, checked) {
@@ -32,9 +34,28 @@ function PermissionEditor({ user }) {
     setPermissions((items) => method === 'DELETE' ? items.filter((item) => item.section_id !== sectionId) : [...items.filter((item) => item.section_id !== sectionId), next])
     setError('')
   }
+  async function savePublicGuidePermission(allowed) {
+    setSavingPublicPermission(true)
+    setError('')
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/public-guides`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ canPublishPublicGuides: allowed }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'No se pudo guardar el permiso')
+      setPublicGuidePermission(Boolean(data.user.canPublishPublicGuides))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSavingPublicPermission(false)
+    }
+  }
   return <div className="mt-4 border-t border-white/10 pt-3">
     <button type="button" onClick={() => setOpen((value) => !value)} className="text-xs font-semibold text-accent">{open ? 'Ocultar permisos de escritura' : 'Permisos de escritura por sección'}</button>
-    {open && <div className="mt-3 space-y-3">{error && <p role="alert" className="text-xs text-red-300">{error}</p>}{sections.map((section) => {
+    {open && <div className="mt-3 space-y-3">{error && <p role="alert" className="text-xs text-red-300">{error}</p>}<label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={publicGuidePermission} disabled={!canGrantPublicGuides || savingPublicPermission} onChange={(event) => savePublicGuidePermission(event.target.checked)} /> Publicar guías públicas{!canGrantPublicGuides && <span className="text-slate-500">(solo admin principal)</span>}</label>{sections.map((section) => {
       const row = permissions.find((item) => item.section_id === section.id)
       return <div key={section.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300"><span className="w-32">{section.label}</span><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_publish_guides)} onChange={(event) => save(section.id, 'can_publish_guides', event.target.checked)} /> Publicar guías</label><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_manage_events)} onChange={(event) => save(section.id, 'can_manage_events', event.target.checked)} /> Gestionar eventos</label></div>
     })}</div>}
@@ -219,7 +240,7 @@ function Dashboard() {
                 </div>
               )}
             </div>
-            {!user.isAdmin && <PermissionEditor user={user} />}
+            {!user.isAdmin && <PermissionEditor user={user} canGrantPublicGuides={isMainAdmin} />}
           </li>
         ))}
         {visible.length === 0 && (

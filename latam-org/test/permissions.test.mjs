@@ -27,6 +27,7 @@ test('editor con permiso publica guías en su sección y no en otras ni en públ
   assert.equal(canPublishGuides(editor, 'transporte', editPermission), false)
   assert.equal(canPublishGuides(editor, null, editPermission), false)
   assert.equal(canManageEvents(editor, section, editPermission), false)
+  assert.equal(canPublishGuides({ ...editor, canPublishPublicGuides: true }, null, editPermission), true)
 })
 
 test('miembro lee su sección, visitante solo lee contenido público', () => {

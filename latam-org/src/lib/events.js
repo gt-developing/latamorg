@@ -8,8 +8,20 @@ export function formatEventTime(value) {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    timeZoneName: 'short',
   })
+}
+
+export function formatEventTimeUtc(value) {
+  const formatted = new Date(value).toLocaleString('es-MX', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  })
+  return `${formatted} UTC`
 }
 
 export function relativeEventTime(value) {

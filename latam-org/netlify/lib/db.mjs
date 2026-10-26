@@ -8,6 +8,7 @@ const mapUser = (row) =>
         name: row.name,
         avatar: row.avatar,
         roles: row.roles ?? [],
+        canPublishPublicGuides: Boolean(row.can_publish_public_guides),
         firstSeen: row.first_seen,
         lastLogin: row.last_login,
       }
@@ -44,6 +45,17 @@ export function createUserStore(client) {
       const { data, error } = await client
         .from('users')
         .update({ roles })
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (error) throw error
+      return mapUser(data)
+    },
+
+    async updatePublicGuidePermission(id, allowed) {
+      const { data, error } = await client
+        .from('users')
+        .update({ can_publish_public_guides: allowed })
         .eq('id', id)
         .select('*')
         .single()

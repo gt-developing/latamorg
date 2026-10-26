@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FiSearch } from 'react-icons/fi'
 import { Link } from 'react-router-dom'
-import { searchIndex } from '../lib/content'
+import { useAuth } from '../context/AuthContext'
+import { fetchAvailableGuides } from '../lib/content'
 
 const normalize = (text) =>
   text
@@ -10,15 +11,29 @@ const normalize = (text) =>
     .replace(/[̀-ͯ]/g, '')
 
 export default function SearchBar() {
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [guides, setGuides] = useState([])
+  const [loaded, setLoaded] = useState(false)
   const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchAvailableGuides(Boolean(user)).then((items) => {
+      if (!cancelled) {
+        setGuides(items)
+        setLoaded(true)
+      }
+    })
+    return () => { cancelled = true }
+  }, [user])
 
   const results = useMemo(() => {
     const q = normalize(query.trim())
     if (!q) return []
-    return searchIndex.filter((item) => normalize(item.title).includes(q)).slice(0, 6)
-  }, [query])
+    return guides.filter((item) => normalize(`${item.title} ${item.description}`).includes(q)).slice(0, 6)
+  }, [guides, query])
 
   // Cierra el panel de resultados al hacer clic fuera
   useEffect(() => {
@@ -32,7 +47,7 @@ export default function SearchBar() {
   return (
     <div ref={wrapperRef} className="relative w-full max-w-xs">
       <label htmlFor="site-search" className="sr-only">
-        Buscar guías y recursos
+        Buscar guías
       </label>
       <div className="flex items-center gap-2 rounded-full border border-white/10 bg-space-700/70 px-4 py-2 transition focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/20">
         <FiSearch className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -46,7 +61,7 @@ export default function SearchBar() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
-          placeholder="Buscar guías y recursos…"
+          placeholder="Buscar guías…"
           autoComplete="off"
           className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none"
         />
@@ -64,11 +79,13 @@ export default function SearchBar() {
                 >
                   <span className="truncate">{item.title}</span>
                   <span className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
-                    {item.type}
+                    {item.private ? 'Privada' : item.type}
                   </span>
                 </Link>
               </li>
             ))
+          ) : !loaded ? (
+            <li className="px-4 py-3 text-sm text-slate-400">Cargando guías…</li>
           ) : (
             <li className="px-4 py-3 text-sm text-slate-400">Sin resultados para “{query}”</li>
           )}

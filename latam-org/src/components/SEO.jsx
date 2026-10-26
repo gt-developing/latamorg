@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 const DEFAULT_DESCRIPTION =
-  'LATAM Org: comunidad hispanohablante de Star Citizen con guías, recursos y un espacio para compartir aventuras en el universo.'
+  'LATAM Org: comunidad hispanohablante de Star Citizen con guías y un espacio para compartir aventuras en el universo.'
 const DEFAULT_IMAGE = '/logo.png'
 
 function setMeta(name, content, attribute = 'name') {

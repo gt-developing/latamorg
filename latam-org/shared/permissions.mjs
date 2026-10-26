@@ -10,7 +10,7 @@ export function canReadSection(user, sectionId, permissions = []) {
 
 export function canPublishGuides(user, sectionId, permissions = []) {
   if (user?.isAdmin || isSubadmin(user)) return true
-  if (!sectionId) return false
+  if (!sectionId) return Boolean(user?.canPublishPublicGuides)
   return permissions.some((item) => item.sectionId === sectionId && item.canPublishGuides)
 }
 
