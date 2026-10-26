@@ -150,3 +150,71 @@ export function createGuideStore(client) {
     },
   }
 }
+
+const mapEvent = (row) => row && ({
+  id: row.id,
+  sectionId: row.section_id,
+  title: row.title,
+  description: row.description ?? '',
+  location: row.location ?? '',
+  startsAt: row.starts_at,
+  endsAt: row.ends_at,
+  capacity: row.capacity,
+  cancelled: Boolean(row.cancelled),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+export function createEventStore(client) {
+  const checked = ({ data, error }) => {
+    if (error) throw error
+    return data
+  }
+  return {
+    async listUpcoming(now) {
+      const rows = checked(await client.from('events').select('id,section_id,title,description,location,starts_at,ends_at,capacity,cancelled').gte('ends_at', now).order('starts_at')) ?? []
+      return rows.map(mapEvent)
+    },
+    async listAll() {
+      const rows = checked(await client.from('events').select('id,section_id,title,description,location,starts_at,ends_at,capacity,cancelled').order('starts_at', { ascending: false })) ?? []
+      return rows.map(mapEvent)
+    },
+    async getEvent(id) {
+      return mapEvent(checked(await client.from('events').select('*').eq('id', id).maybeSingle()))
+    },
+    async getRsvps(eventIds) {
+      if (!eventIds.length) return []
+      return checked(await client.from('event_rsvps').select('event_id,user_id,status').in('event_id', eventIds)) ?? []
+    },
+    async setRsvp({ eventId, userId, status }) {
+      return checked(await client.rpc('set_event_rsvp_atomic', {
+        p_event_id: eventId,
+        p_user_id: userId,
+        p_status: status,
+      }))
+    },
+    async deleteRsvp(eventId, userId) {
+      return checked(await client.from('event_rsvps').delete().eq('event_id', eventId).eq('user_id', userId))
+    },
+    async attendees(eventId) {
+      const rsvps = checked(await client.from('event_rsvps').select('user_id,status,responded_at').eq('event_id', eventId).eq('status', 'going').order('responded_at')) ?? []
+      if (!rsvps.length) return []
+      const users = checked(await client.from('users').select('id,name,username,avatar').in('id', rsvps.map((item) => item.user_id))) ?? []
+      const byId = new Map(users.map((user) => [user.id, user]))
+      return rsvps.map((rsvp) => {
+        const user = byId.get(rsvp.user_id)
+        return user ? { name: user.name, username: user.username, status: rsvp.status, respondedAt: rsvp.responded_at } : null
+      }).filter(Boolean)
+    },
+    async insertEvent(values) {
+      return mapEvent(checked(await client.from('events').insert(values).select('*').single()))
+    },
+    async updateEvent(id, values) {
+      return mapEvent(checked(await client.from('events').update(values).eq('id', id).select('*').maybeSingle()))
+    },
+    async deleteEvent(id) {
+      checked(await client.from('event_rsvps').delete().eq('event_id', id))
+      return checked(await client.from('events').delete().eq('id', id))
+    },
+  }
+}

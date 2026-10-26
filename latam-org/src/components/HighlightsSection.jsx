@@ -7,8 +7,8 @@ import {
   FaComments as MessageCircle,
   FaGlobe,
 } from 'react-icons/fa'
-import featuredImage from '../assets/destacado.png'
-import newbieImage from '../assets/nuevos.png'
+import featuredImage from '../assets/destacado.webp'
+import newbieImage from '../assets/nuevos.webp'
 import ContentSection from './ContentSection'
 import { fetchPublicGuides, searchIndex } from '../lib/content'
 import { DISCORD_URL, RSI_ORG_URL } from '../config/links'

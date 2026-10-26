@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS, SUBADMIN_ROLE_ID } from '../../shared/access.mjs'
 import { parseCookies, serializeCookie, sign, verify } from './session.mjs'
-import { canManageUsers, canPublishGuides, canReadSection } from '../../shared/permissions.mjs'
+import { canManageEvents, canManageUsers, canPublishGuides, canReadSection } from '../../shared/permissions.mjs'
 
 const SESSION_COOKIE = 'latam_session'
 const STATE_COOKIE = 'latam_oauth'
@@ -45,7 +45,7 @@ const avatarUrl = (user) =>
  *  - privateGuides: guías confidenciales [{ role, slug, title, description, body }].
  *  - fetchImpl:     fetch (se puede reemplazar en pruebas).
  */
-export function createHandler({ store, guideStore, env, privateGuides = [], fetchImpl = fetch }) {
+export function createHandler({ store, guideStore, eventStore, env, privateGuides = [], fetchImpl = fetch }) {
   const adminId = env.ADMIN_DISCORD_ID || DEFAULT_ADMIN_ID
   const publicUser = (user) => ({
     id: user.id,
@@ -70,8 +70,8 @@ export function createHandler({ store, guideStore, env, privateGuides = [], fetc
     return { user, isAdmin: user.id === adminId }
   }
 
-  const canAccess = async (session, role) =>
-    canReadSection({ ...session.user, isAdmin: session.isAdmin }, role, await permissionRows(session))
+  const canAccess = async (session, role, permissions = null) =>
+    canReadSection({ ...session.user, isAdmin: session.isAdmin }, role, permissions ?? await permissionRows(session))
 
   const canManage = (session) =>
     session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
@@ -87,6 +87,38 @@ export function createHandler({ store, guideStore, env, privateGuides = [], fetc
     const user = { ...session.user, isAdmin: session.isAdmin }
     return canPublishGuides(user, sectionId, await permissionRows(session))
   }
+  const canManageEventSection = async (session, sectionId, permissions = null) => {
+    const user = { ...session.user, isAdmin: session.isAdmin }
+    return canManageEvents(user, sectionId, permissions ?? await permissionRows(session))
+  }
+  const eventInput = async (body) => {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Datos inválidos' }
+    const { title, description = '', location = '', starts_at: startsAt, capacity = null, section_id: sectionId = null } = body
+    if (typeof title !== 'string' || !title.trim() || title.trim().length > 200) return { error: 'El título debe tener entre 1 y 200 caracteres' }
+    if (typeof description !== 'string' || description.length > 5000) return { error: 'La descripción no puede superar 5000 caracteres' }
+    if (typeof location !== 'string' || location.length > 300) return { error: 'La ubicación no puede superar 300 caracteres' }
+    const isoDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/
+    const startDate = typeof startsAt === 'string' && isoDate.test(startsAt) ? new Date(startsAt) : null
+    if (!startDate || !Number.isFinite(startDate.getTime())) return { error: 'La fecha de inicio debe ser ISO 8601 válida' }
+    const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000)
+    let parsedCapacity = null
+    if (capacity !== null && capacity !== '') {
+      parsedCapacity = Number(capacity)
+      if (!Number.isSafeInteger(parsedCapacity) || parsedCapacity < 1) return { error: 'La capacidad debe ser un entero positivo o quedar vacía' }
+    }
+    if (sectionId !== null && (typeof sectionId !== 'string' || !(await guideStore.sections()).some((section) => section.id === sectionId))) return { error: 'Sección inválida' }
+    return { values: { title: title.trim(), description: description.trim(), location: location.trim(), starts_at: startDate.toISOString(), ends_at: endDate.toISOString(), capacity: parsedCapacity, section_id: sectionId } }
+  }
+  const canSeeEvent = async (session, event, permissions = null) => Boolean(event && (event.sectionId === null || (session && await canAccess(session, event.sectionId, permissions))))
+  const canManageEvent = async (session, event, permissions = null) => Boolean(session && event && await canManageEventSection(session, event.sectionId, permissions))
+  const eventPayload = (event) => ({
+    ...event,
+    section_id: event.sectionId,
+    starts_at: event.startsAt,
+    ends_at: event.endsAt,
+    rsvpClosed: event.cancelled || new Date(event.startsAt) <= new Date(),
+    sectionLabel: event.sectionId ? ROLES.find((section) => section.id === event.sectionId)?.label ?? event.sectionId : 'Público',
+  })
   const guidePayload = (guide) => ({ ...guide, section_id: guide.sectionId })
   const guideInput = async (body) => {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Datos inválidos' }
@@ -288,6 +320,145 @@ export function createHandler({ store, guideStore, env, privateGuides = [], fetc
         }
       }
 
+      // ───────── Eventos y confirmaciones ─────────
+      if (eventStore && method === 'GET' && path === '/events') {
+        const session = await getSession(req)
+        const [permissions, upcomingEvents] = await Promise.all([
+          session ? permissionRows(session) : Promise.resolve([]),
+          eventStore.listUpcoming(new Date().toISOString()),
+        ])
+        let events = upcomingEvents
+        events = (await Promise.all(events.map(async (event) => (await canSeeEvent(session, event, permissions)) ? event : null))).filter(Boolean)
+        const requestedSection = url.searchParams.get('section')
+        if (requestedSection === 'public') events = events.filter((event) => event.sectionId === null)
+        else if (requestedSection) events = events.filter((event) => event.sectionId === requestedSection)
+        const rsvps = await eventStore.getRsvps(events.map((event) => event.id))
+        const summaries = new Map()
+        for (const rsvp of rsvps) {
+          const summary = summaries.get(rsvp.event_id) ?? { going: 0, maybe: 0, declined: 0, myRsvp: null }
+          summary[rsvp.status] += 1
+          if (session?.user.id === rsvp.user_id) summary.myRsvp = rsvp.status
+          summaries.set(rsvp.event_id, summary)
+        }
+        return json({ events: events.map((event) => ({ ...eventPayload(event), ...(summaries.get(event.id) ?? { going: 0, maybe: 0, declined: 0, myRsvp: null }) })) })
+      }
+
+      const eventAttendeesMatch = path.match(/^\/events\/([^/]+)\/attendees$/)
+      if (eventStore && method === 'GET' && eventAttendeesMatch) {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        const eventId = eventAttendeesMatch[1]
+        if (!/^[0-9a-f-]{36}$/i.test(eventId)) return json({ error: 'Evento no encontrado' }, 404)
+        const event = await eventStore.getEvent(eventId)
+        if (!event || !(await canSeeEvent(session, event))) return json({ error: 'Evento no encontrado' }, 404)
+        if (!(await canManageEvent(session, event))) return json({ error: 'No tienes permiso para ver asistentes' }, 403)
+        return json({ attendees: await eventStore.attendees(event.id) })
+      }
+
+      const eventRsvpMatch = path.match(/^\/events\/([^/]+)\/rsvp$/)
+      if (eventStore && eventRsvpMatch) {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        const eventId = eventRsvpMatch[1]
+        if (!/^[0-9a-f-]{36}$/i.test(eventId)) return json({ error: 'Evento no encontrado' }, 404)
+        const event = await eventStore.getEvent(eventId)
+        if (!event || !(await canSeeEvent(session, event))) return json({ error: 'Evento no encontrado' }, 404)
+        if (method === 'DELETE') {
+          await eventStore.deleteRsvp(event.id, session.user.id)
+          return json({ ok: true })
+        }
+        if (method === 'PUT') {
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          if (!['going', 'maybe', 'declined'].includes(body?.status)) return json({ error: 'Respuesta RSVP inválida' }, 400)
+          if (event.cancelled || new Date(event.startsAt) <= new Date()) return json({ error: 'Este evento ya no acepta confirmaciones' }, 409)
+          const result = await eventStore.setRsvp({ eventId: event.id, userId: session.user.id, status: body.status })
+          if (result === 'not_found') return json({ error: 'Evento no encontrado' }, 404)
+          if (result === 'closed') return json({ error: 'Este evento ya no acepta confirmaciones' }, 409)
+          if (result === 'full') return json({ error: 'El evento alcanzó su capacidad' }, 409)
+          if (result !== 'ok') return json({ error: 'Respuesta RSVP inválida' }, 400)
+          return json({ ok: true, status: body.status })
+        }
+      }
+
+      const eventDetailMatch = path.match(/^\/events\/([^/]+)$/)
+      if (eventStore && method === 'GET' && eventDetailMatch) {
+        const session = await getSession(req)
+        const eventId = eventDetailMatch[1]
+        if (!/^[0-9a-f-]{36}$/i.test(eventId)) return json({ error: 'Evento no encontrado' }, 404)
+        const [permissions, event] = await Promise.all([
+          session ? permissionRows(session) : Promise.resolve([]),
+          eventStore.getEvent(eventId),
+        ])
+        if (!event || !(await canSeeEvent(session, event, permissions))) return json({ error: 'Evento no encontrado' }, 404)
+        const [rsvps, isManager] = await Promise.all([eventStore.getRsvps([event.id]), canManageEvent(session, event, permissions)])
+        const summary = { going: 0, maybe: 0, declined: 0, myRsvp: null }
+        for (const rsvp of rsvps) {
+          summary[rsvp.status] += 1
+          if (session?.user.id === rsvp.user_id) summary.myRsvp = rsvp.status
+        }
+        return json({ event: { ...eventPayload(event), ...summary }, isManager })
+      }
+
+      if (eventStore && path.startsWith('/dashboard/events')) {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        if (method === 'GET' && path === '/dashboard/events') {
+          const [permissions, events] = await Promise.all([permissionRows(session), eventStore.listAll()])
+          const manageable = (await Promise.all(events.map(async (event) => (await canManageEvent(session, event, permissions)) ? event : null))).filter(Boolean)
+          const rsvps = await eventStore.getRsvps(manageable.map((event) => event.id))
+          const summaries = new Map()
+          for (const rsvp of rsvps) {
+            const summary = summaries.get(rsvp.event_id) ?? { going: 0, maybe: 0, declined: 0 }
+            summary[rsvp.status] += 1
+            summaries.set(rsvp.event_id, summary)
+          }
+          return json({ events: manageable.map((event) => ({ ...eventPayload(event), ...(summaries.get(event.id) ?? { going: 0, maybe: 0, declined: 0 }) })) })
+        }
+        if (method === 'POST' && path === '/dashboard/events') {
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          const parsed = await eventInput(body)
+          if (parsed.error) return json({ error: parsed.error }, 400)
+          if (!(await canManageEventSection(session, parsed.values.section_id))) return json({ error: 'No tienes permiso para gestionar eventos en esta sección' }, 403)
+          const event = await eventStore.insertEvent({ ...parsed.values, created_by: session.user.id, cancelled: false })
+          return json({ event: eventPayload(event) }, 201)
+        }
+        const cancelMatch = path.match(/^\/dashboard\/events\/([^/]+)\/cancel$/)
+        const editMatch = path.match(/^\/dashboard\/events\/([^/]+)$/)
+        const eventId = cancelMatch?.[1] ?? editMatch?.[1]
+        if (eventId && /^(PUT|DELETE|POST)$/.test(method)) {
+          if (!/^[0-9a-f-]{36}$/i.test(eventId)) return json({ error: 'Evento no encontrado' }, 404)
+          const event = await eventStore.getEvent(eventId)
+          if (!event || !(await canSeeEvent(session, event))) return json({ error: 'Evento no encontrado' }, 404)
+          if (!(await canManageEvent(session, event))) return json({ error: 'No tienes permiso para gestionar este evento' }, 403)
+          if (method === 'DELETE' && editMatch) {
+            await eventStore.deleteEvent(event.id)
+            return json({ ok: true })
+          }
+          if (method === 'POST' && cancelMatch) {
+            const updated = await eventStore.updateEvent(event.id, { cancelled: true })
+            return json({ event: eventPayload(updated) })
+          }
+          if (method === 'PUT' && editMatch) {
+            if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+            let body
+            try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+            const parsed = await eventInput(body)
+            if (parsed.error) return json({ error: parsed.error }, 400)
+            if (!(await canManageEventSection(session, parsed.values.section_id))) return json({ error: 'No tienes permiso para gestionar eventos en esta sección' }, 403)
+            if (parsed.values.capacity !== null) {
+              const going = (await eventStore.getRsvps([event.id])).filter((rsvp) => rsvp.status === 'going').length
+              if (going > parsed.values.capacity) return json({ error: 'La capacidad no puede ser menor que las confirmaciones actuales' }, 409)
+            }
+            const updated = await eventStore.updateEvent(event.id, parsed.values)
+            return json({ event: eventPayload(updated) })
+          }
+        }
+      }
+
       // Concesión y revocación de permisos de edición por sección.
       const permissionRoute = path.match(/^\/admin\/users\/([^/]+)\/permissions(?:\/([^/]+))?$/)
       if (guideStore && permissionRoute) {
@@ -322,7 +493,8 @@ export function createHandler({ store, guideStore, env, privateGuides = [], fetc
         if (!session) return json({ error: 'Inicia sesión' }, 401)
         const roles = ROLES
         if (guideStore) {
-          const access = (await Promise.all(roles.map(async (role) => (await canAccess(session, role.id)) ? role.id : null))).filter((id) => id && id !== SUBADMIN_ROLE_ID)
+          const permissions = await permissionRows(session)
+          const access = roles.filter((role) => canReadSection({ ...session.user, isAdmin: session.isAdmin }, role.id, permissions)).map((role) => role.id).filter((id) => id !== SUBADMIN_ROLE_ID)
           const guides = (await guideStore.listBySections(access)).map((guide) => ({
             ...guidePayload(guide), role: guide.sectionId,
             roleLabel: roles.find((role) => role.id === guide.sectionId)?.label ?? guide.sectionId,
@@ -414,7 +586,13 @@ export function createHandler({ store, guideStore, env, privateGuides = [], fetc
 
       return json({ error: 'No encontrado' }, 404)
     } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error))
+      const technicalMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error?.message === 'string'
+            ? error.message
+            : String(error)
+      console.error(technicalMessage)
       if (error?.code === '23505') return json({ error: 'Ya existe una guía con ese slug en la sección' }, 409)
       return json({ error: 'Error del servidor' }, 500)
     }

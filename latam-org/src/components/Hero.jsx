@@ -1,6 +1,6 @@
 import { FaDiscord } from 'react-icons/fa'
 import { Link } from 'react-router-dom'
-import bannerImage from '../assets/banner.png'
+import bannerImage from '../assets/banner.webp'
 import { DISCORD_URL } from '../config/links'
 
 export default function Hero() {

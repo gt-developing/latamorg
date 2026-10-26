@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import bannerImage from '../assets/banner.png'
+import bannerImage from '../assets/banner.webp'
 
 export default function ContentCard({ item }) {
   return (

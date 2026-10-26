@@ -88,6 +88,13 @@ export default function UserMenu() {
             </Link>
           )}
 
+          {(isAdmin || isSubadmin || permissions?.manageEvents?.length) && (
+            <Link to="/dashboard/eventos" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
+              <FaShieldAlt className="h-4 w-4 text-accent" aria-hidden="true" />
+              Gestionar eventos
+            </Link>
+          )}
+
           <button
             type="button"
             role="menuitem"
