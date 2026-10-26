@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS, SUBADMIN_ROLE_ID } from '../../shared/access.mjs'
 import { parseCookies, serializeCookie, sign, verify } from './session.mjs'
+import { canManageUsers, canPublishGuides, canReadSection } from '../../shared/permissions.mjs'
 
 const SESSION_COOKIE = 'latam_session'
 const STATE_COOKIE = 'latam_oauth'
@@ -44,7 +45,7 @@ const avatarUrl = (user) =>
  *  - privateGuides: guías confidenciales [{ role, slug, title, description, body }].
  *  - fetchImpl:     fetch (se puede reemplazar en pruebas).
  */
-export function createHandler({ store, env, privateGuides = [], fetchImpl = fetch }) {
+export function createHandler({ store, guideStore, env, privateGuides = [], fetchImpl = fetch }) {
   const adminId = env.ADMIN_DISCORD_ID || DEFAULT_ADMIN_ID
   const publicUser = (user) => ({
     id: user.id,
@@ -69,13 +70,39 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
     return { user, isAdmin: user.id === adminId }
   }
 
-  const canAccess = (session, role) =>
-    session.isAdmin ||
-    (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID) ||
-    (session.user.roles ?? []).includes(role)
+  const canAccess = async (session, role) =>
+    canReadSection({ ...session.user, isAdmin: session.isAdmin }, role, await permissionRows(session))
 
   const canManage = (session) =>
     session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
+
+  const permissionRows = async (session) => {
+    if (!guideStore || session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)) return []
+    return (await guideStore.permissions(session.user.id)).map((row) => ({
+      sectionId: row.section_id, canPublishGuides: row.can_publish_guides,
+      canManageEvents: row.can_manage_events,
+    }))
+  }
+  const canPublish = async (session, sectionId) => {
+    const user = { ...session.user, isAdmin: session.isAdmin }
+    return canPublishGuides(user, sectionId, await permissionRows(session))
+  }
+  const guidePayload = (guide) => ({ ...guide, section_id: guide.sectionId })
+  const guideInput = async (body) => {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Datos inválidos' }
+    const { slug, title, description = '', body: content, image = '', section_id: sectionId = null, status = 'draft' } = body
+    if (typeof slug !== 'string' || !/^[A-Za-z0-9_-]+$/.test(slug)) return { error: 'Slug inválido' }
+    if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 200) return { error: 'El título debe tener entre 1 y 200 caracteres' }
+    if (typeof description !== 'string' || description.length > 500) return { error: 'La descripción no puede superar 500 caracteres' }
+    if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > 200 * 1024) return { error: 'El cuerpo es obligatorio y no puede superar 200 KB' }
+    if (typeof image !== 'string' || (image && (!/^https:\/\//i.test(image) || image.length > 2048))) return { error: 'La imagen debe ser una URL HTTPS o quedar vacía' }
+    if (sectionId !== null && typeof sectionId !== 'string') return { error: 'Sección inválida' }
+    if (!['draft', 'published'].includes(status)) return { error: 'Estado inválido' }
+    if (sectionId !== null && !(await guideStore.sections()).some((section) => section.id === sectionId)) return { error: 'Sección inválida' }
+    return { values: { slug, title: title.trim(), description: description.trim(), body: content, image, section_id: sectionId, status } }
+  }
+  const canManageGuide = async (session, guide) =>
+    Boolean(guide && (await canPublish(session, guide.sectionId) || (guide.authorId === session.user.id && guide.status === 'draft')))
 
   return async function handle(req) {
     try {
@@ -180,7 +207,113 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         const session = await getSession(req)
         if (!session) return json({ user: null, roles: [], isAdmin: false })
         const user = publicUser(session.user)
-        return json({ user, roles: user.roles, isAdmin: session.isAdmin, isSubadmin: user.isSubadmin })
+        const permissions = await permissionRows(session)
+        const allSections = session.isAdmin || user.isSubadmin ? (guideStore ? await guideStore.sections() : []).map((item) => item.id) : null
+        return json({
+          user, roles: user.roles, isAdmin: session.isAdmin, isSubadmin: user.isSubadmin,
+          permissions: {
+            publishGuides: allSections ?? permissions.filter((item) => item.canPublishGuides).map((item) => item.sectionId),
+            manageEvents: allSections ?? permissions.filter((item) => item.canManageEvents).map((item) => item.sectionId),
+          },
+        })
+      }
+
+      // ───────── Guías públicas y dashboard ─────────
+      if (guideStore && method === 'GET' && path === '/guides') {
+        const guides = (await guideStore.listPublishedPublic()).map(({ body: _body, ...item }) => guidePayload(item))
+        return json({ guides })
+      }
+      const publicGuideMatch = path.match(/^\/guides\/([^/]+)$/)
+      if (guideStore && method === 'GET' && publicGuideMatch) {
+        const guide = await guideStore.getPublicBySlug(publicGuideMatch[1])
+        return guide ? json({ guide: guidePayload(guide) }) : json({ error: 'No encontrada' }, 404)
+      }
+      if (guideStore && path.startsWith('/dashboard/guides')) {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        const permissions = await permissionRows(session)
+        const elevated = session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
+        const writable = elevated
+          ? (await guideStore.sections()).map((item) => item.id)
+          : permissions.filter((item) => item.canPublishGuides).map((item) => item.sectionId)
+        const publicWriter = elevated
+        if (method === 'GET' && path === '/dashboard/guides') {
+          const guides = (await guideStore.listManaged(writable, publicWriter, session.user.id)).filter((guide) =>
+            (guide.authorId === session.user.id && guide.status === 'draft') ||
+            (guide.sectionId === null ? publicWriter : writable.includes(guide.sectionId)),
+          )
+          return json({ guides: guides.map(({ body: _body, ...item }) => guidePayload(item)) })
+        }
+        if (method === 'POST' && path === '/dashboard/guides') {
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          const parsed = await guideInput(body)
+          if (parsed.error) return json({ error: parsed.error }, 400)
+          if (!(await canPublish(session, parsed.values.section_id))) return json({ error: 'No tienes permiso para publicar en esta sección' }, 403)
+          const values = { ...parsed.values, author_id: session.user.id, published_at: parsed.values.status === 'published' ? new Date().toISOString() : null }
+          const guide = await guideStore.insertGuide(values)
+          return json({ guide: guidePayload(guide) }, 201)
+        }
+        const editMatch = path.match(/^\/dashboard\/guides\/([^/]+)$/)
+        if (editMatch) {
+          const id = editMatch[1]
+          const existing = await guideStore.getGuide(id)
+          if (!existing || !(await canManageGuide(session, existing))) return json({ error: 'No encontrada' }, 404)
+          if (method === 'GET') return json({ guide: guidePayload(existing) })
+          if (method === 'PUT') {
+            if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+            let body
+            try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+            const parsed = await guideInput(body)
+            if (parsed.error) return json({ error: parsed.error }, 400)
+            if (!(await canPublish(session, existing.sectionId)) || !(await canPublish(session, parsed.values.section_id))) return json({ error: 'No tienes permiso para publicar en esta sección' }, 403)
+            const values = { ...parsed.values, published_at: parsed.values.status === 'published' ? existing.publishedAt ?? new Date().toISOString() : null }
+            const guide = await guideStore.updateGuide(id, values)
+            return guide ? json({ guide: guidePayload(guide) }) : json({ error: 'No encontrada' }, 404)
+          }
+          if (method === 'DELETE') {
+            await guideStore.deleteGuide(id)
+            return json({ ok: true })
+          }
+        }
+        const publishMatch = path.match(/^\/dashboard\/guides\/([^/]+)\/publish$/)
+        if (method === 'POST' && publishMatch) {
+          const guide = await guideStore.getGuide(publishMatch[1])
+          if (!guide || !(await canManageGuide(session, guide))) return json({ error: 'No encontrada' }, 404)
+          if (!(await canPublish(session, guide.sectionId))) return json({ error: 'No tienes permiso para publicar en esta sección' }, 403)
+          const status = guide.status === 'published' ? 'draft' : 'published'
+          const updated = await guideStore.updateGuide(guide.id, { status, published_at: status === 'published' ? new Date().toISOString() : null })
+          return json({ guide: guidePayload(updated) })
+        }
+      }
+
+      // Concesión y revocación de permisos de edición por sección.
+      const permissionRoute = path.match(/^\/admin\/users\/([^/]+)\/permissions(?:\/([^/]+))?$/)
+      if (guideStore && permissionRoute) {
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        if (!canManageUsers({ ...session.user, isAdmin: session.isAdmin })) return json({ error: 'Solo administradores' }, 403)
+        const [, userId, sectionId] = permissionRoute
+        if (!DISCORD_ID.test(userId)) return json({ error: 'ID inválido' }, 400)
+        if (userId === adminId || (!session.isAdmin && userId === session.user.id)) return json({ error: 'No puedes modificar este usuario' }, 403)
+        if (method === 'GET' && !sectionId) return json({ permissions: await guideStore.permissions(userId), sections: await guideStore.sections() })
+        if (!sectionId || !(await guideStore.sections()).some((item) => item.id === sectionId)) return json({ error: 'Sección inválida' }, 400)
+        const target = await store.get(userId)
+        if (!target) return json({ error: 'Usuario no encontrado' }, 404)
+        if (method === 'DELETE') {
+          await guideStore.revokePermission(userId, sectionId)
+          return json({ ok: true })
+        }
+        if (method === 'PUT') {
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          if (typeof body?.canPublishGuides !== 'boolean' || typeof body?.canManageEvents !== 'boolean') return json({ error: 'Permisos inválidos' }, 400)
+          const permission = await guideStore.grantPermission({ userId, sectionId, canPublishGuides: body.canPublishGuides, canManageEvents: body.canManageEvents, grantedBy: session.user.id })
+          if ((body.canPublishGuides || body.canManageEvents) && !target.roles.includes(sectionId)) await store.updateRoles(userId, [...target.roles, sectionId])
+          return json({ permission })
+        }
       }
 
       // ───────── Guías privadas ─────────
@@ -188,8 +321,16 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         const session = await getSession(req)
         if (!session) return json({ error: 'Inicia sesión' }, 401)
         const roles = ROLES
+        if (guideStore) {
+          const access = (await Promise.all(roles.map(async (role) => (await canAccess(session, role.id)) ? role.id : null))).filter((id) => id && id !== SUBADMIN_ROLE_ID)
+          const guides = (await guideStore.listBySections(access)).map((guide) => ({
+            ...guidePayload(guide), role: guide.sectionId,
+            roleLabel: roles.find((role) => role.id === guide.sectionId)?.label ?? guide.sectionId,
+          })).map(({ body: _body, ...meta }) => meta)
+          return json({ guides })
+        }
         const guides = privateGuides
-          .filter((guide) => canAccess(session, guide.role))
+          .filter((guide) => (session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID) || (session.user.roles ?? []).includes(guide.role)))
           .map(({ body: _body, ...meta }) => ({
             ...meta,
             roleLabel: roles.find((role) => role.id === meta.role)?.label ?? meta.role,
@@ -206,7 +347,12 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
         if (!roles.some((item) => item.id === role) || !SLUG.test(slug)) {
           return json({ error: 'No encontrada' }, 404)
         }
-        if (!canAccess(session, role)) return json({ error: 'No tienes permiso' }, 403)
+        if (!(await canAccess(session, role))) return json({ error: 'No tienes permiso' }, 403)
+        if (guideStore) {
+          const guide = (await guideStore.listBySections([role])).find((item) => item.slug === slug)
+          if (!guide) return json({ error: 'No encontrada' }, 404)
+          return json({ guide: { ...guidePayload(guide), role, roleLabel: roles.find((item) => item.id === role)?.label ?? role } })
+        }
         const guide = privateGuides.find((item) => item.role === role && item.slug === slug)
         if (!guide) return json({ error: 'No encontrada' }, 404)
         return json({
@@ -269,6 +415,7 @@ export function createHandler({ store, env, privateGuides = [], fetchImpl = fetc
       return json({ error: 'No encontrado' }, 404)
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error))
+      if (error?.code === '23505') return json({ error: 'Ya existe una guía con ese slug en la sección' }, 409)
       return json({ error: 'Error del servidor' }, 500)
     }
   }

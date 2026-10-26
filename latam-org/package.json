@@ -9,6 +9,7 @@
     "dev:api": "node scripts/generate-private.mjs && netlify dev",
     "generate-private": "node scripts/generate-private.mjs",
     "lint": "oxlint",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {

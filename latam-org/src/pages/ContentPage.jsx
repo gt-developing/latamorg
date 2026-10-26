@@ -1,11 +1,25 @@
 import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { getItem, sectionLabels } from '../lib/content'
+import { fetchPublicGuide, getItem, sectionLabels } from '../lib/content'
 import SEO from '../components/SEO'
+import { safeMarkdownUrl } from '../lib/markdown'
 
 export default function ContentPage() {
   const { section, slug } = useParams()
-  const item = getItem(section, slug)
+  const [remoteItem, setRemoteItem] = useState(null)
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    if (section !== 'guias') return undefined
+    let cancelled = false
+    fetchPublicGuide(slug).then((guide) => {
+      if (!cancelled) { setRemoteItem(guide); setLoaded(true) }
+    }).catch(() => !cancelled && setLoaded(true))
+    return () => { cancelled = true }
+  }, [section, slug])
+  const item = section === 'guias' ? remoteItem : getItem(section, slug)
+
+  if (section === 'guias' && !loaded) return <main className="px-global py-16 text-slate-400">Cargando guía…</main>
 
   if (!item) {
     return (
@@ -52,7 +66,7 @@ export default function ContentPage() {
         </p>
         <h1>{item.title}</h1>
         {item.description && <p className="lead text-slate-400">{item.description}</p>}
-        <ReactMarkdown>{item.body}</ReactMarkdown>
+        <ReactMarkdown urlTransform={safeMarkdownUrl}>{item.body}</ReactMarkdown>
       </article>
     </main>
   )

@@ -6,6 +6,41 @@ import { useAuth } from '../context/AuthContext'
 const formatDate = (value) =>
   value ? new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 
+function PermissionEditor({ user }) {
+  const [open, setOpen] = useState(false)
+  const [sections, setSections] = useState([])
+  const [permissions, setPermissions] = useState([])
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!open) return undefined
+    let cancelled = false
+    fetch(`/api/admin/users/${user.id}/permissions`, { credentials: 'same-origin' }).then(async (res) => {
+      if (!res.ok) throw new Error('No se pudieron cargar los permisos')
+      return res.json()
+    }).then((data) => { if (!cancelled) { setSections(data.sections); setPermissions(data.permissions) } }).catch((e) => !cancelled && setError(e.message))
+    return () => { cancelled = true }
+  }, [open, user.id])
+  async function save(sectionId, key, checked) {
+    const current = permissions.find((item) => item.section_id === sectionId) ?? { section_id: sectionId, can_publish_guides: false, can_manage_events: false }
+    const next = { ...current, [key]: checked }
+    const method = !next.can_publish_guides && !next.can_manage_events ? 'DELETE' : 'PUT'
+    const response = await fetch(`/api/admin/users/${user.id}/permissions/${sectionId}`, {
+      method, credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+      ...(method === 'PUT' ? { body: JSON.stringify({ canPublishGuides: next.can_publish_guides, canManageEvents: next.can_manage_events }) } : {}),
+    })
+    if (!response.ok) { setError('No se pudo guardar el permiso'); return }
+    setPermissions((items) => method === 'DELETE' ? items.filter((item) => item.section_id !== sectionId) : [...items.filter((item) => item.section_id !== sectionId), next])
+    setError('')
+  }
+  return <div className="mt-4 border-t border-white/10 pt-3">
+    <button type="button" onClick={() => setOpen((value) => !value)} className="text-xs font-semibold text-accent">{open ? 'Ocultar permisos de escritura' : 'Permisos de escritura por sección'}</button>
+    {open && <div className="mt-3 space-y-3">{error && <p role="alert" className="text-xs text-red-300">{error}</p>}{sections.map((section) => {
+      const row = permissions.find((item) => item.section_id === section.id)
+      return <div key={section.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300"><span className="w-32">{section.label}</span><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_publish_guides)} onChange={(event) => save(section.id, 'can_publish_guides', event.target.checked)} /> Publicar guías</label><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_manage_events)} onChange={(event) => save(section.id, 'can_manage_events', event.target.checked)} /> Gestionar eventos</label></div>
+    })}</div>}
+  </div>
+}
+
 function Dashboard() {
   const { isAdmin: isMainAdmin } = useAuth()
   const [users, setUsers] = useState([])
@@ -184,6 +219,7 @@ function Dashboard() {
                 </div>
               )}
             </div>
+            {!user.isAdmin && <PermissionEditor user={user} />}
           </li>
         ))}
         {visible.length === 0 && (

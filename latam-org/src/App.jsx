@@ -13,6 +13,7 @@ import PrivateGuides from './pages/PrivateGuides'
 import PrivateGuide from './pages/PrivateGuide'
 import Admin from './pages/Admin'
 import { AuthProvider } from './context/AuthContext'
+import Dashboard from './pages/Dashboard'
 
 function App() {
   return (
@@ -38,6 +39,8 @@ function App() {
             <Route path="/privadas" element={<PrivateGuides />} />
             <Route path="/privadas/:role/:slug" element={<PrivateGuide />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/dashboard/guias" element={<Dashboard />} />
+            <Route path="/dashboard/guias/:id" element={<Dashboard />} />
             <Route path="/:section" element={<ContentListPage />} />
             <Route path="/:section/:slug" element={<ContentPage />} />
           </Routes>

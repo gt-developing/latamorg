@@ -1,5 +1,11 @@
 # React + Vite
 
+## Guías administradas en Supabase
+
+Las guías públicas guardadas en Supabase aparecen en `/guias` junto con las guías Markdown de `src/content/guias/`. Si ambas fuentes tienen el mismo slug, se muestra la versión de Supabase. Las guías de Supabase se sirven en tiempo de ejecución y todavía no se incluyen en `public/sitemap.xml`, que se genera durante el build. Para que los buscadores las encuentren, habrá que añadir generación dinámica del sitemap o un endpoint de sitemap que consulte Supabase.
+
+Las guías públicas de `src/content/guias/` y las privadas de ejemplo en `private-content/` se importan una vez, después de que el admin haya iniciado sesión, ejecutando `node --env-file=.env netlify/scripts/seed-guides.mjs` dentro de `latam-org/`. El importador usa `DEFAULT_ADMIN_ID` si `ADMIN_DISCORD_ID` no está configurado. Los slugs no válidos se normalizan (por ejemplo, `Primeros pasos` pasa a `Primeros-pasos`). El importador conserva las guías que ya existan en Supabase con la misma sección y slug.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:
