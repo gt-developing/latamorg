@@ -10,13 +10,18 @@ const fieldClass = 'mt-1 w-full rounded-lg border border-white/10 bg-space-700/7
 export default function DashboardEvents() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, permissions, isAdmin, isSubadmin } = useAuth()
+  const { user, permissions, isAdmin, isSubadmin, isVoidEnforcersManager } = useAuth()
   const [events, setEvents] = useState([])
   const [event, setEvent] = useState(blankEvent)
   const [status, setStatus] = useState(id && id !== 'nueva' ? 'loading' : 'ready')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const managerSections = useMemo(() => isAdmin || isSubadmin ? ROLES.filter((item) => item.id !== 'subadmins').map((item) => item.id) : permissions?.manageEvents ?? [], [isAdmin, isSubadmin, permissions])
+  const managerSections = useMemo(() => {
+    if (isAdmin) return ROLES.filter((item) => item.id !== 'subadmins').map((item) => item.id)
+    const sections = [...(permissions?.manageEvents ?? [])].filter((section) => section !== 'void-enforcers')
+    if (isVoidEnforcersManager && !sections.includes('void-enforcers')) sections.push('void-enforcers')
+    return sections
+  }, [isAdmin, isVoidEnforcersManager, permissions])
   const canManagePublic = isAdmin || isSubadmin
   const sectionOptions = ROLES.filter((item) => managerSections.includes(item.id) && item.id !== 'subadmins')
   const selectedSection = event.section_id || (!canManagePublic ? sectionOptions[0]?.id ?? '' : '')

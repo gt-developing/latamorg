@@ -11,14 +11,19 @@ const fieldClass = 'mt-1 w-full rounded-lg border border-white/10 bg-space-700/7
 export default function Dashboard() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, permissions, isAdmin, isSubadmin } = useAuth()
+  const { user, permissions, isAdmin, isSubadmin, isVoidEnforcersManager } = useAuth()
   const [guides, setGuides] = useState([])
   const [guide, setGuide] = useState(blankGuide)
   const [status, setStatus] = useState(id && id !== 'nueva' ? 'loading' : 'ready')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [preview, setPreview] = useState(false)
-  const availableIds = useMemo(() => isAdmin || isSubadmin ? ROLES.map((item) => item.id).filter((id) => id !== 'subadmins') : (permissions?.publishGuides ?? []), [isAdmin, isSubadmin, permissions])
+  const availableIds = useMemo(() => {
+    if (isAdmin) return ROLES.map((item) => item.id).filter((id) => id !== 'subadmins')
+    const ids = [...(permissions?.publishGuides ?? [])].filter((id) => id !== 'void-enforcers')
+    if (isVoidEnforcersManager && !ids.includes('void-enforcers')) ids.push('void-enforcers')
+    return ids
+  }, [isAdmin, isVoidEnforcersManager, permissions])
   const availableSections = useMemo(() => ROLES.filter((item) => availableIds.includes(item.id) && item.id !== 'subadmins'), [availableIds])
   const mayWritePublic = isAdmin || isSubadmin || permissions?.publishPublicGuides
 

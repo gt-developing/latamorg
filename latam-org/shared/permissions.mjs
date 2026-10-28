@@ -9,12 +9,14 @@ export function canReadSection(user, sectionId, permissions = []) {
 }
 
 export function canPublishGuides(user, sectionId, permissions = []) {
+  if (sectionId === 'void-enforcers') return Boolean(user?.isAdmin || user?.isVoidEnforcersManager)
   if (user?.isAdmin || isSubadmin(user)) return true
   if (!sectionId) return Boolean(user?.canPublishPublicGuides)
   return permissions.some((item) => item.sectionId === sectionId && item.canPublishGuides)
 }
 
 export function canManageEvents(user, sectionId, permissions = []) {
+  if (sectionId === 'void-enforcers') return Boolean(user?.isAdmin || user?.isVoidEnforcersManager)
   if (user?.isAdmin || isSubadmin(user)) return true
   if (!sectionId) return false
   return permissions.some((item) => item.sectionId === sectionId && item.canManageEvents)

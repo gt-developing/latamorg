@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS, SUBADMIN_ROLE_ID } from '../../shared/access.mjs'
+import { DEFAULT_ADMIN_ID, ROLES, ROLE_IDS, SUBADMIN_ROLE_ID, VOID_ENFORCERS_RANKS } from '../../shared/access.mjs'
 import { parseCookies, serializeCookie, sign, verify } from './session.mjs'
 import { canManageEvents, canManageUsers, canPublishGuides, canReadSection } from '../../shared/permissions.mjs'
 
@@ -8,6 +8,7 @@ const STATE_COOKIE = 'latam_oauth'
 const SESSION_SECONDS = 7 * 24 * 60 * 60
 const DISCORD_ID = /^\d{5,25}$/
 const SLUG = /^[a-z0-9][a-z0-9_-]*$/i
+const VOID_ENFORCERS_ID = 'void-enforcers'
 
 const json = (data, status = 200, cookies = []) => {
   const headers = new Headers({
@@ -45,7 +46,7 @@ const avatarUrl = (user) =>
  *  - privateGuides: guías confidenciales [{ role, slug, title, description, body }].
  *  - fetchImpl:     fetch (se puede reemplazar en pruebas).
  */
-export function createHandler({ store, guideStore, eventStore, env, privateGuides = [], fetchImpl = fetch }) {
+export function createHandler({ store, guideStore, eventStore, voidEnforcersStore, env, privateGuides = [], fetchImpl = fetch }) {
   const adminId = env.ADMIN_DISCORD_ID || DEFAULT_ADMIN_ID
   const publicUser = (user) => ({
     id: user.id,
@@ -84,11 +85,25 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
       canManageEvents: row.can_manage_events,
     }))
   }
+  const isVoidEnforcersManager = async (session) => {
+    if (!session) return false
+    if (session.isAdmin) return true
+    if (!(session.user.roles ?? []).includes(VOID_ENFORCERS_ID) || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)) return false
+    const settings = await voidEnforcersStore?.getSettings()
+    return Boolean(settings?.admiral_user_id && settings.admiral_user_id === session.user.id)
+  }
+  const voidEnforcersMemberPayload = (member, admiralId = null) => member && ({
+    ...member,
+    avatar: avatarUrl({ id: member.id, avatar: member.avatar }),
+    isAdmiral: member.id === admiralId,
+  })
   const canPublish = async (session, sectionId) => {
+    if (sectionId === VOID_ENFORCERS_ID) return isVoidEnforcersManager(session)
     const user = { ...session.user, isAdmin: session.isAdmin }
     return canPublishGuides(user, sectionId, await permissionRows(session))
   }
   const canManageEventSection = async (session, sectionId, permissions = null) => {
+    if (sectionId === VOID_ENFORCERS_ID) return isVoidEnforcersManager(session)
     const user = { ...session.user, isAdmin: session.isAdmin }
     return canManageEvents(user, sectionId, permissions ?? await permissionRows(session))
   }
@@ -136,6 +151,7 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
   }
   const canManageGuide = async (session, guide) => {
     if (!guide) return false
+    if (guide.sectionId === VOID_ENFORCERS_ID) return isVoidEnforcersManager(session)
     if (session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)) return true
     if (guide.authorId !== session.user.id) return false
     if (guide.status === 'draft') return true
@@ -243,18 +259,136 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
       // ───────── Sesión actual ─────────
       if (method === 'GET' && path === '/me') {
         const session = await getSession(req)
-        if (!session) return json({ user: null, roles: [], isAdmin: false })
+        if (!session) return json({ user: null, roles: [], isAdmin: false, isVoidEnforcersManager: false })
         const user = publicUser(session.user)
         const permissions = await permissionRows(session)
         const allSections = session.isAdmin || user.isSubadmin ? (guideStore ? await guideStore.sections() : []).map((item) => item.id) : null
+        const isVoidManager = await isVoidEnforcersManager(session)
+        const publishSections = allSections
+          ? allSections.filter((sectionId) => session.isAdmin || !user.isSubadmin || sectionId !== VOID_ENFORCERS_ID)
+          : permissions.filter((item) => item.canPublishGuides).map((item) => item.sectionId)
+        const manageSections = allSections
+          ? allSections.filter((sectionId) => session.isAdmin || !user.isSubadmin || sectionId !== VOID_ENFORCERS_ID)
+          : permissions.filter((item) => item.canManageEvents).map((item) => item.sectionId)
+        if (isVoidManager && !manageSections.includes(VOID_ENFORCERS_ID)) manageSections.push(VOID_ENFORCERS_ID)
+        if (isVoidManager && !publishSections.includes(VOID_ENFORCERS_ID)) publishSections.push(VOID_ENFORCERS_ID)
         return json({
           user, roles: user.roles, isAdmin: session.isAdmin, isSubadmin: user.isSubadmin,
+          isVoidEnforcersManager: isVoidManager,
           permissions: {
-            publishGuides: allSections ?? permissions.filter((item) => item.canPublishGuides).map((item) => item.sectionId),
-            manageEvents: allSections ?? permissions.filter((item) => item.canManageEvents).map((item) => item.sectionId),
+            publishGuides: publishSections,
+            manageEvents: manageSections,
             publishPublicGuides: Boolean(user.canPublishPublicGuides || session.isAdmin || user.isSubadmin),
           },
         })
+      }
+
+      // ───────── Dashboard propio de Void Enforcers ─────────
+      if (path.startsWith('/void-enforcers/')) {
+        if (!voidEnforcersStore) return json({ error: 'Dashboard no disponible' }, 404)
+        const session = await getSession(req)
+        if (!session) return json({ error: 'Inicia sesión' }, 401)
+        if (!session.isAdmin && (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)) return json({ error: 'Los subadmins no tienen acceso al dashboard de Void Enforcers' }, 403)
+        const manager = await isVoidEnforcersManager(session)
+        const isMember = (session.user.roles ?? []).includes(VOID_ENFORCERS_ID) || manager
+        if (method === 'GET' && path === '/void-enforcers/dashboard') {
+          if (!manager && !isMember) return json({ error: 'No tienes acceso a Void Enforcers' }, 403)
+          const settings = await voidEnforcersStore.getSettings()
+          if (manager) {
+            await voidEnforcersStore.ensureDefaultRanks(VOID_ENFORCERS_RANKS)
+            const [catalog, member] = await Promise.all([
+              voidEnforcersStore.getDashboardCatalog([adminId, settings?.admiral_user_id].filter(Boolean)),
+              isMember ? voidEnforcersStore.getMember(session.user.id) : Promise.resolve(null),
+            ])
+            return json({ isManager: true, isMember, admiralId: settings?.admiral_user_id ?? null, ...catalog, members: catalog.members.map((item) => voidEnforcersMemberPayload(item, settings?.admiral_user_id)), member: voidEnforcersMemberPayload(member, settings?.admiral_user_id) })
+          }
+          return json({ isManager: false, isMember: true, admiralId: settings?.admiral_user_id ?? null, member: voidEnforcersMemberPayload(await voidEnforcersStore.getMember(session.user.id), settings?.admiral_user_id) })
+        }
+
+        if (method === 'PUT' && path === '/void-enforcers/admiral') {
+          if (!session.isAdmin) return json({ error: 'Solo el administrador principal puede designar al almirante' }, 403)
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          if (body?.userId !== null && (typeof body?.userId !== 'string' || !DISCORD_ID.test(body.userId))) return json({ error: 'Usuario inválido' }, 400)
+          if (body.userId) {
+            const target = await store.get(body.userId)
+            if (!target || !(target.roles ?? []).includes(VOID_ENFORCERS_ID) || (target.roles ?? []).includes(SUBADMIN_ROLE_ID)) return json({ error: 'El almirante debe ser miembro de Void Enforcers y no ser subadmin' }, 400)
+          }
+          const settings = await voidEnforcersStore.setAdmiral(body.userId, session.user.id)
+          return json({ admiralId: settings.admiral_user_id })
+        }
+
+        if (!manager) return json({ error: 'No tienes permiso para administrar Void Enforcers' }, 403)
+
+        const memberMatch = path.match(/^\/void-enforcers\/members\/([^/]+)$/)
+        if (method === 'PUT' && memberMatch) {
+          const userId = memberMatch[1]
+          if (!DISCORD_ID.test(userId)) return json({ error: 'Usuario inválido' }, 400)
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          const target = await store.get(userId)
+          const settings = await voidEnforcersStore.getSettings()
+          const isImplicitMember = userId === adminId || userId === settings?.admiral_user_id
+          if (!target || (!(target.roles ?? []).includes(VOID_ENFORCERS_ID) && !isImplicitMember) || ((target.roles ?? []).includes(SUBADMIN_ROLE_ID) && userId !== adminId)) return json({ error: 'Miembro no encontrado' }, 404)
+          if (body?.rankId !== null && (typeof body?.rankId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.rankId))) return json({ error: 'Rango inválido' }, 400)
+          if (!Array.isArray(body?.certificationIds) || body.certificationIds.some((id) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) || new Set(body.certificationIds).size !== body.certificationIds.length) return json({ error: 'Certificaciones inválidas' }, 400)
+          const catalog = await voidEnforcersStore.getDashboardCatalog()
+          if (body.rankId && !catalog.ranks.some((rank) => rank.id === body.rankId && rank.active)) return json({ error: 'Rango no disponible' }, 400)
+          if (body.rankId && catalog.ranks.some((rank) => rank.id === body.rankId && rank.name === 'Almirante') && userId !== settings?.admiral_user_id) return json({ error: 'Solo el almirante designado puede tener ese rango' }, 400)
+          if (body.certificationIds.some((id) => !catalog.certifications.some((certification) => certification.id === id && certification.active))) return json({ error: 'Certificación no disponible' }, 400)
+          await voidEnforcersStore.updateMemberAssignment(userId, body.rankId, body.certificationIds, session.user.id)
+          return json({ member: voidEnforcersMemberPayload(await voidEnforcersStore.getMember(userId), settings?.admiral_user_id) })
+        }
+
+        const attendanceMatch = path.match(/^\/void-enforcers\/operations\/([^/]+)\/attendance$/)
+        if (method === 'PUT' && attendanceMatch) {
+          const eventId = attendanceMatch[1]
+          if (!/^[0-9a-f-]{36}$/i.test(eventId)) return json({ error: 'Operación no encontrada' }, 404)
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          if (!Array.isArray(body?.attendance) || body.attendance.length > 500 || body.attendance.some((item) => !item || typeof item.userId !== 'string' || !DISCORD_ID.test(item.userId) || typeof item.attended !== 'boolean') || new Set(body.attendance.map((item) => item.userId)).size !== body.attendance.length) return json({ error: 'Lista de asistencia inválida' }, 400)
+          const event = await eventStore.getEvent(eventId)
+          if (!event || event.sectionId !== VOID_ENFORCERS_ID || new Date(event.endsAt) > new Date()) return json({ error: 'Operación pasada no encontrada' }, 404)
+          const settings = await voidEnforcersStore.getSettings()
+          const members = await voidEnforcersStore.listMembers([adminId, settings?.admiral_user_id].filter(Boolean))
+          const memberIds = new Set(members.map((member) => member.id))
+          if (body.attendance.some((item) => !memberIds.has(item.userId))) return json({ error: 'La lista contiene personas ajenas a Void Enforcers' }, 400)
+          await voidEnforcersStore.saveAttendance(eventId, body.attendance, session.user.id)
+          return json({ ok: true })
+        }
+
+        const configMatch = path.match(/^\/void-enforcers\/config\/(ranks|certifications)(?:\/([^/]+))?$/)
+        if (configMatch && ['POST', 'PUT', 'DELETE'].includes(method)) {
+          const [, kind, id] = configMatch
+          if (id && !/^[0-9a-f-]{36}$/i.test(id)) return json({ error: 'Identificador inválido' }, 400)
+          if (method === 'DELETE') {
+            if (!id) return json({ error: 'Identificador requerido' }, 400)
+            if (kind === 'ranks') await voidEnforcersStore.deleteRank(id)
+            else await voidEnforcersStore.deleteCertification(id)
+            return json({ ok: true })
+          }
+          if (!(req.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'Content-Type debe ser application/json' }, 415)
+          let body
+          try { body = await req.json() } catch { return json({ error: 'JSON inválido' }, 400) }
+          const maxName = kind === 'ranks' ? 100 : 120
+          if (typeof body?.name !== 'string' || !body.name.trim() || body.name.trim().length > maxName || !Number.isSafeInteger(body.sort_order ?? 0) || typeof (body.active ?? true) !== 'boolean') return json({ error: 'Datos de configuración inválidos' }, 400)
+          if (kind === 'certifications' && (typeof (body.description ?? '') !== 'string' || (body.description ?? '').length > 500)) return json({ error: 'Descripción inválida' }, 400)
+          const values = { name: body.name.trim(), sort_order: body.sort_order ?? 0, active: body.active ?? true }
+          if (kind === 'certifications') values.description = (body.description ?? '').trim()
+          let saved
+          try {
+            saved = kind === 'ranks'
+              ? id ? await voidEnforcersStore.updateRankDefinition(id, values) : await voidEnforcersStore.createRank(values)
+              : id ? await voidEnforcersStore.updateCertification(id, values) : await voidEnforcersStore.createCertification(values)
+          } catch (error) {
+            if (error?.code === '23505') return json({ error: 'Ya existe un elemento con ese nombre' }, 409)
+            throw error
+          }
+          return saved ? json({ item: saved }) : json({ error: 'Elemento no encontrado' }, 404)
+        }
       }
 
       // ───────── Guías públicas y dashboard ─────────
@@ -272,13 +406,17 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
         if (!session) return json({ error: 'Inicia sesión' }, 401)
         const permissions = await permissionRows(session)
         const elevated = session.isAdmin || (session.user.roles ?? []).includes(SUBADMIN_ROLE_ID)
+        const voidManager = await isVoidEnforcersManager(session)
         const writable = elevated
-          ? (await guideStore.sections()).map((item) => item.id)
+          ? (await guideStore.sections()).map((item) => item.id).filter((sectionId) => session.isAdmin || !session.user.isSubadmin || sectionId !== VOID_ENFORCERS_ID)
           : permissions.filter((item) => item.canPublishGuides).map((item) => item.sectionId)
-        const publicWriter = elevated || Boolean(session.user.canPublishPublicGuides)
+        if (voidManager && !writable.includes(VOID_ENFORCERS_ID)) writable.push(VOID_ENFORCERS_ID)
+        const publicWriter = session.isAdmin || session.user.isSubadmin || Boolean(session.user.canPublishPublicGuides)
         if (method === 'GET' && path === '/dashboard/guides') {
           const guides = (await guideStore.listManaged(writable, publicWriter, session.user.id)).filter((guide) =>
-            elevated ||
+            guide.sectionId === VOID_ENFORCERS_ID
+              ? voidManager
+              : elevated ||
               (guide.authorId === session.user.id &&
                 (guide.status === 'draft' || (guide.sectionId === null ? publicWriter : writable.includes(guide.sectionId)))),
           )
@@ -500,6 +638,7 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
           return json({ permissions, sections, canPublishPublicGuides: Boolean(target.canPublishPublicGuides) })
         }
         if (!sectionId || !(await guideStore.sections()).some((item) => item.id === sectionId)) return json({ error: 'Sección inválida' }, 400)
+        if (sectionId === VOID_ENFORCERS_ID && !session.isAdmin) return json({ error: 'Solo el administrador principal puede asignar permisos de Void Enforcers' }, 403)
         const target = await store.get(userId)
         if (!target) return json({ error: 'Usuario no encontrado' }, 404)
         if (method === 'DELETE') {
@@ -608,6 +747,7 @@ export function createHandler({ store, guideStore, eventStore, env, privateGuide
             return json({ error: 'No puedes modificar este usuario' }, 403)
           }
           const roles = ROLE_IDS.filter((role) => body.roles.includes(role))
+          if (!session.isAdmin && roles.includes(VOID_ENFORCERS_ID) !== target.roles.includes(VOID_ENFORCERS_ID)) return json({ error: 'Solo el administrador principal puede modificar miembros de Void Enforcers' }, 403)
           const updated = await store.updateRoles(id, roles)
           return json({ user: publicUser(updated) })
         }

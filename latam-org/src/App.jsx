@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import CommunitySection from './components/Communitysection'
 import Header from './components/Header'
@@ -16,6 +17,8 @@ import { AuthProvider } from './context/AuthContext'
 import Dashboard from './pages/Dashboard'
 import Events from './pages/Events'
 import DashboardEvents from './pages/DashboardEvents'
+
+const VoidEnforcersDashboard = lazy(() => import('./pages/VoidEnforcersDashboard'))
 
 function LegacyResourceRedirect() {
   const { slug } = useParams()
@@ -52,6 +55,7 @@ function App() {
             <Route path="/dashboard/guias/:id" element={<Dashboard />} />
             <Route path="/dashboard/eventos" element={<DashboardEvents />} />
             <Route path="/dashboard/eventos/:id" element={<DashboardEvents />} />
+            <Route path="/void-enforcers" element={<Suspense fallback={<main className="px-global py-16 text-slate-400">Cargando división…</main>}><VoidEnforcersDashboard /></Suspense>} />
             <Route path="/recursos" element={<Navigate to="/guias" replace />} />
             <Route path="/recursos/:slug" element={<LegacyResourceRedirect />} />
             <Route path="/:section" element={<ContentListPage />} />

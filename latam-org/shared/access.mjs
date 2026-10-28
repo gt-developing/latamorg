@@ -16,5 +16,21 @@ export const ROLES = [
 export const ROLE_IDS = ROLES.map((role) => role.id)
 export const SUBADMIN_ROLE_ID = 'subadmins'
 
+// Orden jerárquico de los rangos de Void Enforcers, de menor a mayor.
+export const VOID_ENFORCERS_RANKS = [
+  'Recluta',
+  'Cabo',
+  'Sargento/Ingenieros de Combate',
+  'Sargento/Ingenieros de Logística/Medico',
+  'Sargento de infiltración/abordaje',
+  'Piloto de caza (Sargento)',
+  'Piloto de caza (Teniente)',
+  'Teniente de armas, (CIC)',
+  'Teniente, Copiloto',
+  'Teniente, Piloto',
+  'Capitán',
+  'Almirante',
+]
+
 // ID de Discord del administrador. Puede sobrescribirse con la variable ADMIN_DISCORD_ID.
 export const DEFAULT_ADMIN_ID = '680603294036787319'

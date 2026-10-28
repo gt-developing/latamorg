@@ -7,7 +7,7 @@ const itemClass =
   'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/5'
 
 export default function UserMenu() {
-  const { user, isAdmin, isSubadmin, permissions, loading, logout } = useAuth()
+  const { user, roles, isAdmin, isSubadmin, isVoidEnforcersManager, permissions, loading, logout } = useAuth()
   const { pathname, search } = useLocation()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -88,10 +88,17 @@ export default function UserMenu() {
             </Link>
           )}
 
-          {Boolean(isAdmin || isSubadmin || permissions?.manageEvents?.length) && (
+          {Boolean(isAdmin || isSubadmin || isVoidEnforcersManager || permissions?.manageEvents?.length) && (
             <Link to="/dashboard/eventos" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
               <FaShieldAlt className="h-4 w-4 text-accent" aria-hidden="true" />
               Gestionar eventos
+            </Link>
+          )}
+
+          {(isVoidEnforcersManager || roles.includes('void-enforcers')) && (
+            <Link to="/void-enforcers" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
+              <FaShieldAlt className="h-4 w-4 text-accent" aria-hidden="true" />
+              Void Enforcers
             </Link>
           )}
 

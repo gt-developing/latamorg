@@ -230,3 +230,140 @@ export function createEventStore(client) {
     },
   }
 }
+
+export function createVoidEnforcersStore(client) {
+  const checked = ({ data, error }) => {
+    if (error) throw error
+    return data
+  }
+  const listRanks = async () => checked(await client.from('void_enforcers_ranks').select('*').order('sort_order').order('name')) ?? []
+  const listCertifications = async () => checked(await client.from('void_enforcers_certifications').select('*').order('sort_order').order('name')) ?? []
+
+  async function sharedDashboardData(userIds) {
+    const [ranks, certifications, profileRows, pastOperations] = await Promise.all([
+      listRanks(),
+      listCertifications(),
+      userIds.length
+        ? client.from('void_enforcers_member_profiles').select('*').in('user_id', userIds).then(checked)
+        : Promise.resolve([]),
+      client.from('events').select('id,title,location,starts_at,ends_at,cancelled').eq('section_id', 'void-enforcers').lte('ends_at', new Date().toISOString()).order('starts_at', { ascending: false }).then(checked),
+    ])
+    const operationIds = pastOperations.map((operation) => operation.id)
+    const [certificationRows, attendanceRows] = await Promise.all([
+      userIds.length
+        ? client.from('void_enforcers_member_certifications').select('*').in('user_id', userIds).then(checked)
+        : Promise.resolve([]),
+      operationIds.length && userIds.length
+        ? client.from('void_enforcers_operation_attendance').select('*').in('event_id', operationIds).in('user_id', userIds).then(checked)
+        : Promise.resolve([]),
+    ])
+    return { ranks, certifications, profileRows, pastOperations, certificationRows, attendanceRows }
+  }
+
+  function formatMember(user, data) {
+    const profile = data.profileRows.find((row) => row.user_id === user.id)
+    const rank = data.ranks.find((row) => row.id === profile?.rank_id) ?? null
+    const memberCertifications = data.certificationRows
+      .filter((row) => row.user_id === user.id)
+      .map((row) => data.certifications.find((certification) => certification.id === row.certification_id))
+      .filter(Boolean)
+    const attendance = data.pastOperations.map((operation) => {
+      const record = data.attendanceRows.find((row) => row.event_id === operation.id && row.user_id === user.id)
+      return { ...operation, attended: Boolean(record?.attended), attendanceRecorded: Boolean(record) }
+    })
+    return {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      avatar: user.avatar,
+      rank,
+      certifications: memberCertifications,
+      operations: attendance,
+    }
+  }
+
+  return {
+    async getSettings() {
+      return checked(await client.from('void_enforcers_settings').select('*').eq('id', 1).maybeSingle())
+    },
+    async setAdmiral(userId, updatedBy) {
+      return checked(await client.from('void_enforcers_settings').upsert({ id: 1, admiral_user_id: userId, updated_by: updatedBy }, { onConflict: 'id' }).select('*').single())
+    },
+    async ensureDefaultRanks(rankNames) {
+      const existing = await listRanks()
+      const normalizeName = (name) => name.toLocaleLowerCase('es-MX').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+      const existingNames = new Set(existing.map((rank) => normalizeName(rank.name)))
+      const missing = rankNames
+        .map((name, index) => ({ name, sort_order: index, active: true }))
+        .filter((rank) => !existingNames.has(normalizeName(rank.name)))
+      if (!missing.length) return existing
+      try {
+        checked(await client.from('void_enforcers_ranks').insert(missing))
+      } catch (error) {
+        if (error?.code !== '23505') throw error
+      }
+      return listRanks()
+    },
+    async listMembers(extraMemberIds = []) {
+      const [roleMembers, extraMembers] = await Promise.all([
+        client.from('users').select('id,name,username,avatar,roles').contains('roles', ['void-enforcers']).order('name').then(checked),
+        extraMemberIds.length
+          ? client.from('users').select('id,name,username,avatar,roles').in('id', extraMemberIds).order('name').then(checked)
+          : Promise.resolve([]),
+      ])
+      const membersById = new Map()
+      for (const member of roleMembers ?? []) {
+        if (!(member.roles ?? []).includes('subadmins')) membersById.set(member.id, member)
+      }
+      for (const member of extraMembers ?? []) {
+        membersById.set(member.id, member)
+      }
+      const members = [...membersById.values()]
+      if (!members.length) return []
+      const data = await sharedDashboardData(members.map((member) => member.id))
+      return members.map((member) => formatMember(member, data))
+    },
+    async getMember(userId) {
+      const user = checked(await client.from('users').select('id,name,username,avatar,roles').eq('id', userId).maybeSingle())
+      if (!user) return null
+      const data = await sharedDashboardData([userId])
+      return formatMember(user, data)
+    },
+    async getDashboardCatalog(extraMemberIds = []) {
+      const [ranks, certifications] = await Promise.all([listRanks(), listCertifications()])
+      const members = await this.listMembers(extraMemberIds)
+      const pastOperations = checked(await client.from('events').select('id,title,location,starts_at,ends_at,cancelled').eq('section_id', 'void-enforcers').lte('ends_at', new Date().toISOString()).order('starts_at', { ascending: false })) ?? []
+      return { ranks, certifications, members, operations: pastOperations }
+    },
+    async updateMemberAssignment(userId, rankId, certificationIds, assignedBy) {
+      return checked(await client.rpc('set_void_enforcers_member_assignment', {
+        p_user_id: userId,
+        p_rank_id: rankId,
+        p_certification_ids: certificationIds,
+        p_assigned_by: assignedBy,
+      }))
+    },
+    async saveAttendance(eventId, attendance, markedBy) {
+      if (!attendance.length) return []
+      return checked(await client.from('void_enforcers_operation_attendance').upsert(attendance.map(({ userId, attended }) => ({ event_id: eventId, user_id: userId, attended, marked_by: markedBy, updated_at: new Date().toISOString() })), { onConflict: 'event_id,user_id' }).select('*'))
+    },
+    async createRank(values) {
+      return checked(await client.from('void_enforcers_ranks').insert(values).select('*').single())
+    },
+    async updateRankDefinition(id, values) {
+      return checked(await client.from('void_enforcers_ranks').update(values).eq('id', id).select('*').maybeSingle())
+    },
+    async deleteRank(id) {
+      return checked(await client.from('void_enforcers_ranks').delete().eq('id', id))
+    },
+    async createCertification(values) {
+      return checked(await client.from('void_enforcers_certifications').insert(values).select('*').single())
+    },
+    async updateCertification(id, values) {
+      return checked(await client.from('void_enforcers_certifications').update(values).eq('id', id).select('*').maybeSingle())
+    },
+    async deleteCertification(id) {
+      return checked(await client.from('void_enforcers_certifications').delete().eq('id', id))
+    },
+  }
+}

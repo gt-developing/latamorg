@@ -55,7 +55,7 @@ function PermissionEditor({ user, canGrantPublicGuides }) {
   }
   return <div className="mt-4 border-t border-white/10 pt-3">
     <button type="button" onClick={() => setOpen((value) => !value)} className="text-xs font-semibold text-accent">{open ? 'Ocultar permisos de escritura' : 'Permisos de escritura por sección'}</button>
-    {open && <div className="mt-3 space-y-3">{error && <p role="alert" className="text-xs text-red-300">{error}</p>}<label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={publicGuidePermission} disabled={!canGrantPublicGuides || savingPublicPermission} onChange={(event) => savePublicGuidePermission(event.target.checked)} /> Publicar guías públicas{!canGrantPublicGuides && <span className="text-slate-500">(solo admin principal)</span>}</label>{sections.map((section) => {
+    {open && <div className="mt-3 space-y-3">{error && <p role="alert" className="text-xs text-red-300">{error}</p>}<label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={publicGuidePermission} disabled={!canGrantPublicGuides || savingPublicPermission} onChange={(event) => savePublicGuidePermission(event.target.checked)} /> Publicar guías públicas{!canGrantPublicGuides && <span className="text-slate-500">(solo admin principal)</span>}</label>{sections.filter((section) => canGrantPublicGuides || section.id !== 'void-enforcers').map((section) => {
       const row = permissions.find((item) => item.section_id === section.id)
       return <div key={section.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-300"><span className="w-32">{section.label}</span><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_publish_guides)} onChange={(event) => save(section.id, 'can_publish_guides', event.target.checked)} /> Publicar guías</label><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(row?.can_manage_events)} onChange={(event) => save(section.id, 'can_manage_events', event.target.checked)} /> Gestionar eventos</label></div>
     })}</div>}
@@ -225,7 +225,7 @@ function Dashboard() {
                         key={role.id}
                         type="button"
                         aria-pressed={active}
-                        disabled={savingId === user.id || (role.id === 'subadmins' && !isMainAdmin)}
+                        disabled={savingId === user.id || ((role.id === 'subadmins' || role.id === 'void-enforcers') && !isMainAdmin)}
                         onClick={() => toggleRole(user, role.id)}
                         className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                           active
